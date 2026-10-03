@@ -150,7 +150,9 @@ details.fold[open] summary{margin-bottom:10px}
 .sub-opt{margin-top:12px;padding-top:10px;border-top:1px dashed #e3e3e3}
 .sub-label{font-weight:700;font-size:.95rem;margin-bottom:6px}
 .sub-opt p{margin:0 0 6px}
-</style></head><body>
+.top-filters{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:12px 0}.top-share-choice{display:block;margin:12px 0 6px;color:#fff;font-size:.9rem}.top-share-note{color:#eee;font-size:.85rem;margin:6px 0;line-height:1.4}#hs-status{font-size:.9rem;margin:8px 0 0}.top-share-choice input{width:18px;height:18px;vertical-align:middle}#top-status{min-height:1.4em}
+</style><meta name="et3-leaderboard-api" content="https://et3-scores-classe.asmm-1896.chatgpt.site">
+</head><body>
   <header class="menu-hdr">
     <div>
       <h1>Ear Training — Année 3</h1>
@@ -555,6 +557,97 @@ const Audio = (() => {
    Core — registre des modules, parcours, écran de menu, moteur de jeu
    (entraînement / test), barème, HUD, scores.
    ===================================================================== */
+/* Public API address only. The Discord publishing secret stays on the server. */
+window.ET3Top = (() => {
+  const api=(document.querySelector('meta[name="et3-leaderboard-api"]')?.content || '').replace(/\/$/,'');
+  const key='et.top.shared.v1';
+  const read=()=>{try{return JSON.parse(localStorage.getItem(key)) || {};}catch{return {};}};
+  const lastName=()=>{try{return JSON.parse(localStorage.getItem('et.lastName')) || '';}catch{return '';}};
+  const write=value=>{localStorage.setItem(key,JSON.stringify(value));};
+  const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  async function request(path,options={}) {
+    const response=await fetch(api+path,{...options,signal:AbortSignal.timeout(10000)});
+    let body;try{body=await response.json();}catch{throw new Error('Le classement est temporairement indisponible.');}
+    if(!response.ok)throw new Error(body.error || 'Enregistrement impossible.');
+    return body;
+  }
+  function mount({root,entry,config,answers,runId,all,onLocalSave,title}) {
+    const profile=read();
+    let period=api?'week':'local',version=0,publishing=false,published=false;
+    root.innerHTML=`<section class="highscore">
+      <div class="hs-flash small">${api?'⭐ ENREGISTRER MON SCORE':'⭐ MON SCORE'}</div>
+      <div class="hs-form"><label for="hs-name">Pseudo :</label><input id="hs-name" maxlength="16" placeholder="Pseudo" autocomplete="nickname" /><button id="hs-ok" class="ctrl-btn" type="button">Enregistrer</button></div>
+      ${api?'<label class="top-share-choice"><input id="hs-share" type="checkbox" /> Partager ce score et mes prochains tests dans le Top ET3 et sur Discord</label><p class="top-share-note">Ton pseudo et tes résultats seront visibles par le groupe et les visiteurs de l’application. Tu peux arrêter le partage en décochant cette case.</p>':''}
+      <p id="hs-status" role="status" aria-live="polite"></p>
+    </section>
+    <section class="board"><h3 class="board-title">★ TOP 10 — ${esc(title)} ★</h3>
+      <div class="top-filters" role="group" aria-label="Période du classement">
+        ${api?'<button type="button" class="tab active" data-period="week">Cette semaine</button><button type="button" class="tab" data-period="all">Tous les temps</button>':''}
+        <button type="button" class="tab ${api?'':'active'}" data-period="local">Cet appareil</button>
+        ${api?'<button type="button" class="ctrl-btn white" id="top-refresh">Actualiser</button>':''}
+      </div>
+      <p id="top-status" class="dim small" role="status" aria-live="polite"></p>
+      <div class="table-wrap"><table class="score-table arcade"><thead><tr><th>Rang</th><th>Nom</th><th>Score</th><th>Note</th><th>Réglages</th><th>Temps</th><th>Date</th></tr></thead><tbody id="top-rows"></tbody></table></div>
+    </section>`;
+    const $=id=>root.querySelector('#'+id),input=$('hs-name'),save=$('hs-ok'),share=$('hs-share'),feedback=$('hs-status');
+    input.value=profile.name || lastName();
+    if(share)share.checked=!!profile.automatic;
+    function renderRows(rows) {
+      const me=read().playerId;
+      $('top-rows').innerHTML=rows.map((s,i)=>`<tr class="${s===entry || (me && s.playerId===me)?'me':''}${i===0?' first':''}"><td data-label="Rang">${['🥇','🥈','🥉'][i] || '#'+(i+1)}</td><td data-label="Nom" class="name">${esc(s.name || '—')}</td><td data-label="Score" class="score">${esc(s.score)}</td><td data-label="Note">${esc(s.grade)}/${2*(s.total || 10)}</td><td data-label="Réglages">${esc(s.summary || '—')}</td><td data-label="Temps">${Number(s.avg || 0).toFixed(1)} s</td><td data-label="Date">${new Date(s.date || s.recordedAt).toLocaleDateString('fr-FR',{timeZone:'Europe/Paris'})}</td></tr>`).join('') || '<tr><td colspan="7">Aucun score pour cette période. À toi de jouer !</td></tr>';
+    }
+    async function refresh() {
+      const current=++version;
+      root.querySelectorAll('[data-period]').forEach(b=>{b.classList.toggle('active',b.dataset.period===period);b.setAttribute('aria-pressed',String(b.dataset.period===period));});
+      if(period==='local'){$('top-status').textContent='Scores enregistrés sur cet appareil · tous les temps';renderRows(all.slice(0,10));return;}
+      $('top-status').textContent='Chargement du classement commun…';$('top-rows').replaceChildren();
+      try {
+        const data=await request('/api/leaderboard?period='+period);
+        if(current!==version || !root.isConnected)return;
+        if(!Array.isArray(data.rows) || !data.week)throw new Error('Réponse du classement invalide.');
+        const date=s=>s.split('-').reverse().join('/');
+        const when=period==='week'?`Du ${date(data.week.start)} au ${date(data.week.end)} · heure de Paris`:'Tous les temps';
+        $('top-status').textContent=`Classement commun · ${when} · ${data.participants} participant${data.participants>1?'s':''}${period==='week' && data.discord?.pending?' · Discord : mise à jour en attente':''}`;
+        renderRows(data.rows);
+      } catch(error) {if(current===version && root.isConnected)$('top-status').textContent='Classement commun indisponible. Tu peux consulter « Cet appareil » ou réessayer.';}
+    }
+    function remember() {
+      const state=read();state.name=input.value.trim();state.automatic=!!share?.checked;write(state);return state;
+    }
+    share?.addEventListener('change',()=>{
+      try{remember();feedback.textContent=share.checked?'Clique sur Enregistrer pour partager ce résultat.':'Partage automatique arrêté pour les prochains tests.';}
+      catch{share.checked=false;feedback.textContent='Le navigateur ne permet pas de mémoriser ton choix.';}
+    });
+    async function store() {
+      if(publishing)return;
+      const name=input.value.trim() || 'Anonyme';
+      onLocalSave(name);entry.name=name;
+      if(!api || !share?.checked){feedback.textContent=`Enregistré sur cet appareil — bravo ${name} !`;if(period==='local')void refresh();return;}
+      if(published){feedback.textContent='Ce résultat est déjà partagé.';return;}
+      if(name==='Anonyme' && !input.value.trim()){feedback.textContent='Choisis un pseudo pour participer au classement commun.';input.focus();return;}
+      publishing=true;save.disabled=true;feedback.textContent='Enregistrement dans le classement commun…';
+      try {
+        const state=remember();
+        if(!/^[a-f0-9]{64}$/.test(state.token || ''))state.token=Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
+        write(state);
+        const data=await request('/api/scores',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${state.token}`},body:JSON.stringify({id:runId,name:state.name,module:'chords3',config,answers,duration:entry.avg*entry.total})});
+        const latest=read();latest.playerId=data.playerId;write(latest);published=true;
+        feedback.textContent='Score partagé dans le Top ET3 !';save.textContent='Enregistré';
+        void refresh();
+      } catch(error) {
+        feedback.textContent=(error.name==='TypeError' || error.name==='TimeoutError')?'Connexion impossible. Ton score est conservé sur cet appareil ; clique sur Enregistrer pour réessayer.':error.message;
+      } finally{publishing=false;save.disabled=false;}
+    }
+    save.addEventListener('click',store);
+    input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();void store();}});
+    root.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click',()=>{period=b.dataset.period;void refresh();}));
+    $('top-refresh')?.addEventListener('click',refresh);
+    void refresh();
+    if(api && profile.automatic && profile.name)void store();
+  }
+  return {mount};
+})();
+
 const ET = (() => {
   /* ---------- petits utilitaires DOM ---------- */
   const $ = id => document.getElementById(id);
@@ -769,6 +862,7 @@ const ET = (() => {
     if (Audio.getBackend() === 'samples' && !Audio.samplesReady()) {
       await Settings.ensureSamples();
     }
+    G.runId = crypto.randomUUID();
     G.index = -1; G.score = 0; G.examPts = []; G.history = []; G.answered = false;
     G.total = cfg.gametype === 'test' ? Number(cfg.questions) : Infinity;
     G.start = Date.now();
@@ -797,8 +891,8 @@ const ET = (() => {
     const nav = h('div', { class: 'buttons-bottom' },
       ui.next, ui.reveal,
       h('button', { class: 'ctrl-btn', type: 'button', onclick: () => { Audio.stop(); startGame(); } }, 'Recommencer'),
-      h('button', { class: 'ctrl-btn white', type: 'button', onclick: () => { Audio.stop(); stopTimer(); renderMenu(); show('menu'); } }, 'Menu du module'),
-      h('button', { class: 'ctrl-btn white', type: 'button', hidden: modules.length === 1, onclick: () => { Audio.stop(); stopTimer(); renderHome(); show('home'); } }, 'Accueil'));
+      h('button', { class: 'ctrl-btn white', type: 'button', onclick: () => { G.runId = null; Audio.stop(); stopTimer(); renderMenu(); show('menu'); } }, 'Menu du module'),
+      h('button', { class: 'ctrl-btn white', type: 'button', hidden: modules.length === 1, onclick: () => { G.runId = null; Audio.stop(); stopTimer(); renderHome(); show('home'); } }, 'Accueil'));
     root.append(h('div', { class: 'screen-hdr compact' }, h('h2', { class: 'screen-title' }, (currentModule.icon || '') + ' ' + currentModule.title)),
       hud, ui.prompt, ui.answer, ui.submit, ui.feedback, ui.result, ui.replays, nav);
   }
@@ -847,10 +941,10 @@ const ET = (() => {
     ui.feedback.className = 'feedback ' + res.status;
     ui.feedback.innerHTML = `<div class="fb-head">${head}</div><div class="fb-body">${res.html || ''}</div>`;
     if (isTest) {
-      recordAnswer(exam, gained);
+      recordAnswer(exam, gained, t);
       // avance automatique : plus de temps pour lire la correction quand la réponse est fausse
-      ui.next.disabled = true; const qid = G.index;
-      setTimeout(() => { if (G.index !== qid) return; ui.next.disabled = false; nextQuestion(); }, res.status === 'full' ? (G.q.advanceDelay || 1400) : 3000);
+      ui.next.disabled = true; const qid = G.index, runId = G.runId;
+      setTimeout(() => { if (G.index !== qid || G.runId !== runId) return; ui.next.disabled = false; nextQuestion(); }, res.status === 'full' ? (G.q.advanceDelay || 1400) : 3000);
     }
     if (G.q.afterAnswer) { try { G.q.afterAnswer(res.status); } catch (_) {} }
     updateHud();
@@ -863,7 +957,7 @@ const ET = (() => {
     ui.feedback.innerHTML = `<div class="fb-head"><span class="half">Réponse affichée</span></div><div class="fb-body">${res.html || ''}</div>`;
     if (G.q.afterAnswer) { try { G.q.afterAnswer('shown'); } catch (_) {} }
   }
-  function recordAnswer(exam, gained) { G.examPts[G.index] = exam; G.score += gained; G.history.push({ exam, gained }); }
+  function recordAnswer(exam, gained, seconds = (Date.now() - G.qStart) / 1000) { G.examPts[G.index] = exam; G.score += gained; G.history.push({ exam, gained, seconds }); }
 
   function endGame() {
     stopTimer();
@@ -872,42 +966,28 @@ const ET = (() => {
     const grade = Scoring.grade(pts);
     const two = pts.filter(v => v === 2).length, one = pts.filter(v => v === 1).length;
     const time = (Date.now() - G.start) / 1000;
-    const [label, icon, img] = grade >= 16 ? ['Très bien', '🏆', 'success'] : grade >= 10 ? ['Correct', '👍', 'ok'] : ['Insuffisant', '📚', 'fail'];
+    const [label, icon, img] = (grade * 10 / total) >= 16 ? ['Très bien', '🏆', 'success'] : (grade * 10 / total) >= 10 ? ['Correct', '👍', 'ok'] : ['Insuffisant', '📚', 'fail'];
     const imgSrc = (window.ET_IMG && window.ET_IMG[img]) || `img/${img}.jpg`;
     ui.prompt.innerHTML = ''; ui.answer.innerHTML = ''; ui.prompt.hidden = true; ui.answer.hidden = true; ui.submit.hidden = true; ui.replays.innerHTML = ''; ui.feedback.innerHTML = ''; ui.next.disabled = true;
     const entry = { date: new Date().toISOString(), grade, score: G.score, total, two, one, avg: time / total, summary: currentModule.summary ? currentModule.summary(cfg) : '', name: '' };
     const key = 'scores.' + currentModule.id;
     const byScore = (x, y) => (y.score - x.score) || (y.grade - x.grade) || ((x.avg || 0) - (y.avg || 0));
     const all = Store.get(key, []); all.push(entry); all.sort(byScore); Store.set(key, all);
-    const rank = all.indexOf(entry);           // 0 = meilleur
-    const inTop = rank < 10;
-    const renderBoard = () => {
-      const top = all.slice(0, 10);
-      const rows = top.map((s, i) => `<tr class="${s === entry ? 'me' : ''}${i === 0 ? ' first' : ''}"><td data-label="Rang">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1)}</td><td data-label="Nom" class="name">${esc(s.name || (s === entry ? '…' : '—'))}</td><td data-label="Score" class="score">${s.score}</td><td data-label="Note">${s.grade}/20</td><td data-label="Réglages">${esc(s.summary || '—')}</td><td data-label="Temps">${(s.avg || 0).toFixed(1)} s</td><td data-label="Date">${new Date(s.date).toLocaleDateString('fr-FR')}</td></tr>`).join('');
-      return `<section class="board"><h3 class="board-title">★ TOP 10 — ${esc(currentModule.title)} ★</h3>
-        <div class="table-wrap"><table class="score-table arcade"><thead><tr><th>Rang</th><th>Nom</th><th>Score</th><th>Note</th><th>Réglages</th><th>Temps</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
-    };
     ui.result.innerHTML = `
       <section class="result-summary">
         <img src="${imgSrc}" alt="${label}" class="score-img" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'result-icon',textContent:'${icon}'}))" />
         <p class="result-title">Test terminé — <strong>${label}</strong></p>
-        <p class="result-grade">${grade}/20</p>
+        <p class="result-grade">${grade}/${total * 2}</p>
         <p class="result-line">Score : <strong>${G.score}</strong> · ${two}×2 pts, ${one}×1 pt, ${total - two - one}×0 pt</p>
         <p class="result-line">Temps total : ${time.toFixed(1)} s · moyenne ${(time / total).toFixed(1)} s/question</p>
       </section>
-      ${inTop ? `<section class="highscore">
-        <div class="hs-flash">${rank === 0 ? '🏆 NOUVEAU RECORD !' : `⭐ TOP 10 — ${rank + 1}${rank === 0 ? 'er' : 'e'} place !`}</div>
-        <div class="hs-form"><label>Entrez votre nom :</label><input id="hs-name" maxlength="16" placeholder="Prénom" autocomplete="off" /><button id="hs-ok" class="ctrl-btn" type="button">Enregistrer</button></div>
-      </section>` : ''}
-      <div id="board-mount">${renderBoard()}</div>`;
-    if (inTop) {
-      const input = $('hs-name'), btn = $('hs-ok');
-      const last = Store.get('lastName', ''); if (last) input.value = last;
-      const save = () => { entry.name = (input.value || 'Anonyme').trim().slice(0, 16); Store.set('lastName', entry.name); Store.set(key, all); $('board-mount').innerHTML = renderBoard(); input.closest('.highscore').innerHTML = `<div class="hs-flash small">Enregistré — bravo ${esc(entry.name)} !</div>`; };
-      btn.addEventListener('click', save);
-      input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); save(); } });
-      setTimeout(() => input.focus(), 50);
-    }
+      <div id="board-mount"></div>`;
+    window.ET3Top.mount({
+      root: $('board-mount'), title: currentModule.title, entry, all,
+      config: JSON.parse(JSON.stringify(cfg)),
+      answers: G.history.map(a => ({ exam: a.exam, seconds: a.seconds })), runId: G.runId,
+      onLocalSave: name => { entry.name = name.slice(0,16); Store.set('lastName',entry.name); Store.set(key,all); }
+    });
   }
 
   function updateHud() {
