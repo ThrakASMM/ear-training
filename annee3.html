@@ -151,6 +151,40 @@ details.fold[open] summary{margin-bottom:10px}
 .sub-label{font-weight:700;font-size:.95rem;margin-bottom:6px}
 .sub-opt p{margin:0 0 6px}
 .top-filters{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:12px 0}.top-share-choice{display:block;margin:12px 0 6px;color:#fff;font-size:.9rem}.top-share-note{color:#eee;font-size:.85rem;margin:6px 0;line-height:1.4}#hs-status{font-size:.9rem;margin:8px 0 0}.top-share-choice input{width:18px;height:18px;vertical-align:middle}#top-status{min-height:1.4em}
+.menu-hdr,.settings-wrap{width:min(1280px,94vw)}
+.et3-layout{width:min(1280px,94vw);display:grid;grid-template-columns:minmax(0,1fr) 330px;align-items:start;gap:18px;margin:6px 0 18px}
+.et3-layout>.screen{width:100%;min-width:0;margin:0}
+.et3-layout.is-playing{grid-template-columns:minmax(0,1fr);max-width:960px}
+.home-top{position:sticky;top:16px;background:#fff;border:1px solid #dfe7fb;border-top:4px solid #0a66ff;border-radius:12px;padding:18px 16px;box-shadow:var(--shadow);min-width:0}
+.home-top[hidden]{display:none}
+.home-top-heading{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.home-top-icon{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:#fff4d6;font-size:23px;flex-shrink:0}
+.home-top-eyebrow{font-size:10px;font-weight:800;letter-spacing:.12em;color:#69758b;margin:0 0 3px}
+.home-top-heading h2{margin:0;font-size:1.05rem;line-height:1.25;color:#17223a}
+.home-top-refresh{margin-left:auto;background:#f3f5f9;color:#394861;flex-shrink:0;width:34px;height:34px;border:0;border-radius:8px;cursor:pointer;font:700 23px system-ui}
+.home-top-tabs{display:flex;gap:4px;flex-wrap:wrap;background:#f3f5f9;padding:4px;border-radius:9px}
+.home-top-tabs button{flex:1;padding:7px 5px;border:0;border-radius:6px;background:transparent;font:600 11px system-ui;color:#586477;white-space:nowrap;cursor:pointer}
+.home-top-tabs button.active{background:#fff;color:#0756d6;box-shadow:0 1px 4px #17223a15}
+.home-top-status{font-size:12px;color:#69758b;line-height:1.5;margin:12px 0 8px;min-height:18px}
+.home-top-list{margin:0;padding:0;list-style:none;max-height:520px;overflow:auto}
+.home-top-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:4px 8px;padding:12px 4px;border-bottom:1px solid #edf0f5;font-variant-numeric:tabular-nums}
+.home-top-row:first-child{background:#fffaf0;border-radius:8px}
+.home-top-row.home-top-me{background:#edf4ff}
+.home-top-rank{text-align:center;font-size:16px;font-weight:800;color:#69758b}
+.home-top-name{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:800;color:#17223a;font-size:14px}
+.home-top-detail{display:block;margin-top:3px;font-size:11px;color:#69758b}
+.home-top-points{text-align:right;font-size:16px;font-weight:800;color:#0756d6}
+.home-top-points small{display:block;font-size:10px;font-weight:500;color:#69758b}
+.home-top-settings{grid-column:2/-1;color:#69758b;font-size:11px;line-height:1.5}
+.home-top-settings summary{cursor:pointer}
+.home-top-settings p{margin:4px 0 0}
+.home-top-empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;background:#f7f9fd;border-radius:10px;padding:26px 16px;font-size:12px;line-height:1.5;color:#69758b}
+.home-top-empty>span[aria-hidden]{font-size:28px;color:#d9a22e}
+.home-top-empty strong{font-size:14px;color:#263650}
+.home-top-help{font-size:12px;line-height:1.55;color:#69758b;border-top:1px solid #edf0f5;margin:14px 0 0;padding-top:12px}
+.home-top :focus-visible{outline:3px solid #0a66ff;outline-offset:3px}
+@media(max-width:900px){.et3-layout{grid-template-columns:minmax(0,1fr);gap:12px}.home-top{position:static;grid-row:1}.home-top-list{max-height:240px}.home-top-heading{margin-bottom:10px}.home-top-empty{padding:14px}.home-top-tabs button{font-size:12px}}
+
 </style><meta name="et3-leaderboard-api" content="https://et3-scores-classe.asmm-1896.chatgpt.site">
 </head><body>
   <header class="menu-hdr">
@@ -163,9 +197,12 @@ details.fold[open] summary{margin-bottom:10px}
 
   <div id="audio-settings" class="settings-wrap"></div>
 
+  <div id="et3-layout" class="et3-layout">
   <main id="screen-home" class="screen"></main>
   <main id="screen-menu" class="screen" hidden></main>
   <main id="screen-game" class="screen" hidden></main>
+  <aside id="home-top" class="home-top" aria-labelledby="home-top-title"></aside>
+  </div>
 
   <footer class="app-footer">© 2026 — Guillaume Estace / American School of Modern Music · Raccourcis : Espace = réécouter, Entrée = valider / suivant</footer>
 
@@ -557,7 +594,7 @@ const Audio = (() => {
    Core — registre des modules, parcours, écran de menu, moteur de jeu
    (entraînement / test), barème, HUD, scores.
    ===================================================================== */
-/* Public API address only. The Discord publishing secret stays on the server. */
+/* Public leaderboard address only; no publishing credentials in the application. */
 window.ET3Top = (() => {
   const api=(document.querySelector('meta[name="et3-leaderboard-api"]')?.content || '').replace(/\/$/,'');
   const key='et.top.shared.v1';
@@ -577,7 +614,7 @@ window.ET3Top = (() => {
     root.innerHTML=`<section class="highscore">
       <div class="hs-flash small">${api?'⭐ ENREGISTRER MON SCORE':'⭐ MON SCORE'}</div>
       <div class="hs-form"><label for="hs-name">Pseudo :</label><input id="hs-name" maxlength="16" placeholder="Pseudo" autocomplete="nickname" /><button id="hs-ok" class="ctrl-btn" type="button">Enregistrer</button></div>
-      ${api?'<label class="top-share-choice"><input id="hs-share" type="checkbox" /> Partager ce score et mes prochains tests dans le Top ET3 et sur Discord</label><p class="top-share-note">Ton pseudo et tes résultats seront visibles par le groupe et les visiteurs de l’application. Tu peux arrêter le partage en décochant cette case.</p>':''}
+      ${api?'<label class="top-share-choice"><input id="hs-share" type="checkbox" /> Partager ce score et mes prochains tests dans le Top de l’application ET3</label><p class="top-share-note">Ton pseudo et tes résultats seront visibles dans l’application. Tu peux arrêter le partage en décochant cette case.</p>':''}
       <p id="hs-status" role="status" aria-live="polite"></p>
     </section>
     <section class="board"><h3 class="board-title">★ TOP 10 — ${esc(title)} ★</h3>
@@ -607,7 +644,7 @@ window.ET3Top = (() => {
         if(!Array.isArray(data.rows) || !data.week)throw new Error('Réponse du classement invalide.');
         const date=s=>s.split('-').reverse().join('/');
         const when=period==='week'?`Du ${date(data.week.start)} au ${date(data.week.end)} · heure de Paris`:'Tous les temps';
-        $('top-status').textContent=`Classement commun · ${when} · ${data.participants} participant${data.participants>1?'s':''}${period==='week' && data.discord?.pending?' · Discord : mise à jour en attente':''}`;
+        $('top-status').textContent=`Classement commun · ${when} · ${data.participants} participant${data.participants>1?'s':''}`;
         renderRows(data.rows);
       } catch(error) {if(current===version && root.isConnected)$('top-status').textContent='Classement commun indisponible. Tu peux consulter « Cet appareil » ou réessayer.';}
     }
@@ -633,6 +670,7 @@ window.ET3Top = (() => {
         const data=await request('/api/scores',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${state.token}`},body:JSON.stringify({id:runId,name:state.name,module:'chords3',config,answers,duration:entry.avg*entry.total})});
         const latest=read();latest.playerId=data.playerId;write(latest);published=true;
         feedback.textContent='Score partagé dans le Top ET3 !';save.textContent='Enregistré';
+        window.dispatchEvent(new Event('et3-score-saved'));
         void refresh();
       } catch(error) {
         feedback.textContent=(error.name==='TypeError' || error.name==='TimeoutError')?'Connexion impossible. Ton score est conservé sur cet appareil ; clique sur Enregistrer pour réessayer.':error.message;
@@ -645,7 +683,61 @@ window.ET3Top = (() => {
     void refresh();
     if(api && profile.automatic && profile.name)void store();
   }
-  return {mount};
+  let refreshHome=()=>{};
+  function mountHome(root) {
+    let period=api?'week':'local',version=0,lastRefresh=0;
+    root.innerHTML=`<header class="home-top-heading"><span class="home-top-icon" aria-hidden="true">🏆</span><div><p class="home-top-eyebrow">LES SCORES ET3</p><h2 id="home-top-title">Top de la semaine</h2></div><button type="button" class="home-top-refresh" aria-label="Actualiser le classement" title="Actualiser le classement">↻</button></header>
+      <div class="home-top-tabs" role="group" aria-label="Afficher les scores">
+        ${api?'<button type="button" data-home-period="week">Cette semaine</button><button type="button" data-home-period="all">Tous les temps</button>':''}
+        <button type="button" data-home-period="local">Cet appareil</button>
+      </div>
+      <p class="home-top-status" role="status" aria-live="polite"></p>
+      <ol class="home-top-list" aria-label="Classement ET3"></ol>
+      <p class="home-top-help">Termine un <strong>test noté</strong>, choisis ton pseudo et partage ton score pour rejoindre le Top.</p>`;
+    const status=root.querySelector('.home-top-status'),list=root.querySelector('.home-top-list'),title=root.querySelector('h2');
+    const localScores=()=>{try{const rows=JSON.parse(localStorage.getItem('et.scores.chords3')) || [];return Array.isArray(rows)?rows.slice(0,10):[];}catch{return [];}};
+    function renderRows(rows) {
+      const me=read().playerId;
+      list.innerHTML=rows.length?rows.slice(0,10).map((s,i)=>`<li class="home-top-row${me && s.playerId===me?' home-top-me':''}">
+        <span class="home-top-rank" aria-label="Rang ${i+1}">${['🥇','🥈','🥉'][i] || i+1}</span>
+        <div class="home-top-player"><span class="home-top-name" title="${esc(s.name || '—')}">${esc(s.name || '—')}</span><span class="home-top-detail">${esc(s.grade)}/${2*(s.total || 10)} · ${Number(s.avg || 0).toLocaleString('fr-FR',{maximumFractionDigits:1})} s/question</span></div>
+        <span class="home-top-points">${Number(s.score || 0).toLocaleString('fr-FR')}<small>points</small></span>
+        <details class="home-top-settings"><summary>Réglages du test</summary><p>${esc(s.summary || 'Réglages non enregistrés')}</p></details>
+      </li>`).join(''):'<li class="home-top-empty"><span aria-hidden="true">✦</span><strong>La première place est libre !</strong><span>Enregistre un test pour lancer le classement.</span></li>';
+    }
+    async function refresh(force=false) {
+      if(!root.isConnected || root.hidden || document.hidden)return;
+      if(!force && Date.now()-lastRefresh<15000)return;
+      lastRefresh=Date.now();const current=++version;
+      title.textContent=period==='week'?'Top de la semaine':period==='all'?'Top de tous les temps':'Top de cet appareil';
+      root.querySelectorAll('[data-home-period]').forEach(b=>{const active=b.dataset.homePeriod===period;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});
+      root.querySelector('.home-top-help').hidden=period==='local';
+      if(period==='local'){status.textContent='Scores conservés ici · tous les temps';renderRows(localScores());return;}
+      status.textContent='Chargement du classement…';list.replaceChildren();
+      try {
+        const data=await request('/api/leaderboard?period='+period);
+        if(current!==version || !root.isConnected)return;
+        if(!Array.isArray(data.rows) || !data.week)throw new Error('Classement invalide.');
+        const shortDate=s=>s.slice(5).split('-').reverse().join('/');
+        status.textContent=(period==='week'?`Du ${shortDate(data.week.start)} au ${shortDate(data.week.end)} · `:'')+`${data.participants} participant${data.participants>1?'s':''}`;
+        renderRows(data.rows);
+      } catch {
+        if(current!==version || !root.isConnected)return;
+        status.textContent='Classement commun indisponible pour le moment.';
+        list.innerHTML='<li class="home-top-empty"><strong>Les scores restent sur ton appareil.</strong><span>Tu peux les consulter avec « Cet appareil », ou réessayer dans un instant.</span></li>';
+      }
+    }
+    root.querySelectorAll('[data-home-period]').forEach(b=>b.addEventListener('click',()=>{period=b.dataset.homePeriod;void refresh(true);}));
+    root.querySelector('.home-top-refresh').addEventListener('click',()=>void refresh(true));
+    refreshHome=()=>void refresh();
+    window.addEventListener('focus',refreshHome);
+    document.addEventListener('visibilitychange',refreshHome);
+    window.addEventListener('et3-score-saved',()=>{lastRefresh=0;void refresh(true);});
+    window.addEventListener('storage',event=>{if(event.key==='et.scores.chords3' || event.key===key)void refresh(true);});
+    window.setInterval(refreshHome,60000);
+    void refresh(true);
+  }
+  return {mount,mountHome,refreshHome:()=>refreshHome()};
 })();
 
 const ET = (() => {
@@ -708,6 +800,9 @@ const ET = (() => {
   function show(name) {
     Object.values(screens).forEach(s => s.hidden = true);
     screens[name].hidden = false;
+    $('home-top').hidden = name === 'game';
+    $('et3-layout').classList.toggle('is-playing', name === 'game');
+    if (name !== 'game') window.ET3Top.refreshHome();
     try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) {}
   }
 
@@ -1040,6 +1135,7 @@ const ET = (() => {
   function init() {
     screens.home = $('screen-home'); screens.menu = $('screen-menu'); screens.game = $('screen-game');
     Settings.render($('audio-settings'));
+    window.ET3Top.mountHome($('home-top'));
     renderHome(); show('home');
     if (modules.length === 1 && CFG.autoOpen !== false) openModule(modules[0].id);
     document.addEventListener('keydown', e => {
