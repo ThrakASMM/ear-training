@@ -157,6 +157,7 @@ details.fold[open] summary{margin-bottom:10px}
 .et3-layout.is-playing{grid-template-columns:minmax(0,1fr);max-width:960px}
 .home-top{position:sticky;top:16px;background:#fff;border:1px solid #dfe7fb;border-top:4px solid #0a66ff;border-radius:12px;padding:18px 16px;box-shadow:var(--shadow);min-width:0}
 .home-top[hidden]{display:none}
+.home-top-format{font-size:.8rem;font-weight:700;color:#243a61;margin:12px 0 8px}.home-top-rules{font-size:.78rem;color:#52607a;line-height:1.5;margin:0 0 14px}.home-top-rules summary{cursor:pointer;font-weight:650}.home-top-rules p{margin:8px 0}.home-top-play{width:100%;margin-top:12px}.challenge-rules{line-height:1.6}.challenge-rules details{font-size:.88rem}.challenge-rules summary{cursor:pointer;font-weight:600}
 .home-top-heading{display:flex;align-items:center;gap:10px;margin-bottom:16px}
 .home-top-icon{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:#fff4d6;font-size:23px;flex-shrink:0}
 .home-top-eyebrow{font-size:10px;font-weight:800;letter-spacing:.12em;color:#69758b;margin:0 0 3px}
@@ -597,8 +598,30 @@ const Audio = (() => {
    Core — registre des modules, parcours, écran de menu, moteur de jeu
    (entraînement / test), barème, HUD, scores.
    ===================================================================== */
+window.ET3Challenge = (() => {
+// Shared by the app and the score service. Change the ID when the rules change.
+const CHALLENGE_ID = 'et3-maj7-min7-10-root-v1';
+const CHALLENGE_CONFIG = Object.freeze({
+  gametype: 'test', questions: 10, mode: 'sim', inversions: 'all', voicing: 'both', refNote: 'any',
+  g_base: Object.freeze(['Maj7', 'Min7']), g_other: Object.freeze([]), g_dom: Object.freeze([]), g_ext: Object.freeze([])
+});
+function challengeConfig() { return JSON.parse(JSON.stringify(CHALLENGE_CONFIG)); }
+function isChallengeConfig(config) {
+  return !!config && Object.entries(CHALLENGE_CONFIG).every(([key, expected]) =>
+    Array.isArray(expected)
+      ? Array.isArray(config[key]) && config[key].length === expected.length && new Set(config[key]).size === expected.length && expected.every(v => config[key].includes(v))
+      : config[key] === expected);
+}
+  const rulesHTML = `<p><strong>10 questions · fondamentale à reconnaître</strong></p>
+    <p>Maj7 et Min7 · tous les renversements · close + drop 2 · accords plaqués. Une note de l’accord est donnée comme référence.</p>
+    <p>Les bonnes réponses et la rapidité rapportent des points, avec le même barème pour tous.</p>
+    <details><summary>Le barème</summary><p>Réponse juste : 100 points + un bonus de rapidité de 5 à 150 points. Réponse partielle : la moitié. Erreur, question passée ou réponse après 60 secondes : 0 point.</p><p>Maximum : 2 500 points. La note sur 20 compte 2 points par réponse juste, 1 par réponse partielle.</p></details>`;
+  return {id:CHALLENGE_ID,config:challengeConfig,accepts:isChallengeConfig,rulesHTML};
+
+})();
 /* Public leaderboard address only; no publishing credentials in the application. */
 window.ET3Top = (() => {
+  const challenge=window.ET3Challenge;
   const api=(document.querySelector('meta[name="et3-leaderboard-api"]')?.content || '').replace(/\/$/,'');
   const key='et.top.shared.v1';
   const read=()=>{try{return JSON.parse(localStorage.getItem(key)) || {};}catch{return {};}};
@@ -613,6 +636,7 @@ window.ET3Top = (() => {
   }
   function mount({root,entry,config,answers,runId,all,onLocalSave,title}) {
     const profile=read();
+    const eligible=entry.ruleset===challenge.id && challenge.accepts(config);
     let period=api?'week':'local',version=0,publishing=false,published=false;
     root.innerHTML=`<section class="highscore">
       <div class="hs-flash small">${api?'⭐ ENREGISTRER MON SCORE':'⭐ MON SCORE'}</div>
@@ -639,12 +663,12 @@ window.ET3Top = (() => {
     async function refresh() {
       const current=++version;
       root.querySelectorAll('[data-period]').forEach(b=>{b.classList.toggle('active',b.dataset.period===period);b.setAttribute('aria-pressed',String(b.dataset.period===period));});
-      if(period==='local'){$('top-status').textContent='Scores enregistrés sur cet appareil · tous les temps';renderRows(all.slice(0,10));return;}
+      if(period==='local'){$('top-status').textContent='Tests aux règles communes enregistrés sur cet appareil';renderRows(all.filter(s=>s.ruleset===challenge.id).slice(0,10));return;}
       $('top-status').textContent='Chargement du classement commun…';$('top-rows').replaceChildren();
       try {
         const data=await request('/api/leaderboard?period='+period);
         if(current!==version || !root.isConnected)return;
-        if(!Array.isArray(data.rows) || !data.week)throw new Error('Réponse du classement invalide.');
+        if(!Array.isArray(data.rows) || !data.week || data.ruleset!==challenge.id)throw new Error('Réponse du classement invalide.');
         const date=s=>s.split('-').reverse().join('/');
         const when=period==='week'?`Du ${date(data.week.start)} au ${date(data.week.end)} · heure de Paris`:'Tous les temps';
         $('top-status').textContent=`Classement commun · ${when} · ${data.participants} participant${data.participants>1?'s':''}`;
@@ -663,6 +687,7 @@ window.ET3Top = (() => {
       const name=input.value.trim() || 'Anonyme';
       onLocalSave(name);entry.name=name;
       if(!api || !share?.checked){feedback.textContent=`Enregistré sur cet appareil — bravo ${name} !`;if(period==='local')void refresh();return;}
+      if(!eligible){feedback.textContent='Pour rejoindre le Top, lance le test commun de 10 questions.';return;}
       if(published){feedback.textContent='Ce résultat est déjà partagé.';return;}
       if(name==='Anonyme' && !input.value.trim()){feedback.textContent='Choisis un pseudo pour participer au classement commun.';input.focus();return;}
       publishing=true;save.disabled=true;feedback.textContent='Enregistrement dans le classement commun…';
@@ -670,7 +695,7 @@ window.ET3Top = (() => {
         const state=remember();
         if(!/^[a-f0-9]{64}$/.test(state.token || ''))state.token=Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
         write(state);
-        const data=await request('/api/scores',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${state.token}`},body:JSON.stringify({id:runId,name:state.name,module:'chords3',config,answers,duration:entry.avg*entry.total})});
+        const data=await request('/api/scores',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${state.token}`},body:JSON.stringify({id:runId,name:state.name,module:'chords3',ruleset:entry.ruleset,config,answers,duration:entry.avg*entry.total})});
         const latest=read();latest.playerId=data.playerId;write(latest);published=true;
         feedback.textContent='Score partagé dans le Top ET3 !';save.textContent='Enregistré';
         window.dispatchEvent(new Event('et3-score-saved'));
@@ -684,7 +709,7 @@ window.ET3Top = (() => {
     root.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click',()=>{period=b.dataset.period;void refresh();}));
     $('top-refresh')?.addEventListener('click',refresh);
     void refresh();
-    if(api && profile.automatic && profile.name)void store();
+    if(api && eligible && profile.automatic && profile.name)void store();
   }
   let refreshHome=()=>{};
   function mountHome(root) {
@@ -694,11 +719,14 @@ window.ET3Top = (() => {
         ${api?'<button type="button" data-home-period="week">Cette semaine</button><button type="button" data-home-period="all">Tous les temps</button>':''}
         <button type="button" data-home-period="local">Cet appareil</button>
       </div>
+      <p class="home-top-format">10 questions · fondamentale à reconnaître</p>
+      <details class="home-top-rules"><summary>Les règles communes</summary>${challenge.rulesHTML}</details>
       <p class="home-top-status" role="status" aria-live="polite"></p>
       <ol class="home-top-list" aria-label="Classement ET3"></ol>
-      <p class="home-top-help">Termine un <strong>test noté</strong>, choisis ton pseudo et partage ton score pour rejoindre le Top.</p>`;
+      <p class="home-top-help">Comme au flipper : un pseudo si tu le souhaites, juste pour le fun.</p>
+      <button type="button" class="ctrl-btn home-top-play">Jouer le test du Top</button>`;
     const status=root.querySelector('.home-top-status'),list=root.querySelector('.home-top-list'),title=root.querySelector('h2');
-    const localScores=()=>{try{const rows=JSON.parse(localStorage.getItem('et.scores.chords3')) || [];return Array.isArray(rows)?rows.slice(0,10):[];}catch{return [];}};
+    const localScores=()=>{try{const rows=JSON.parse(localStorage.getItem('et.scores.chords3')) || [];return Array.isArray(rows)?rows.filter(s=>s.ruleset===challenge.id).slice(0,10):[];}catch{return [];}};
     function renderRows(rows) {
       const me=read().playerId;
       list.innerHTML=rows.length?rows.slice(0,10).map((s,i)=>`<li class="home-top-row${me && s.playerId===me?' home-top-me':''}">
@@ -715,12 +743,12 @@ window.ET3Top = (() => {
       title.textContent=period==='week'?'Top de la semaine':period==='all'?'Top de tous les temps':'Top de cet appareil';
       root.querySelectorAll('[data-home-period]').forEach(b=>{const active=b.dataset.homePeriod===period;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});
       root.querySelector('.home-top-help').hidden=period==='local';
-      if(period==='local'){status.textContent='Scores conservés ici · tous les temps';renderRows(localScores());return;}
+      if(period==='local'){status.textContent='Tests aux règles communes conservés ici';renderRows(localScores());return;}
       status.textContent='Chargement du classement…';list.replaceChildren();
       try {
         const data=await request('/api/leaderboard?period='+period);
         if(current!==version || !root.isConnected)return;
-        if(!Array.isArray(data.rows) || !data.week)throw new Error('Classement invalide.');
+        if(!Array.isArray(data.rows) || !data.week || data.ruleset!==challenge.id)throw new Error('Classement invalide.');
         const shortDate=s=>s.slice(5).split('-').reverse().join('/');
         status.textContent=(period==='week'?`Du ${shortDate(data.week.start)} au ${shortDate(data.week.end)} · `:'')+`${data.participants} participant${data.participants>1?'s':''}`;
         renderRows(data.rows);
@@ -732,6 +760,7 @@ window.ET3Top = (() => {
     }
     root.querySelectorAll('[data-home-period]').forEach(b=>b.addEventListener('click',()=>{period=b.dataset.homePeriod;void refresh(true);}));
     root.querySelector('.home-top-refresh').addEventListener('click',()=>void refresh(true));
+    root.querySelector('.home-top-play').addEventListener('click',()=>window.dispatchEvent(new Event('et3-open-test')));
     refreshHome=()=>void refresh();
     window.addEventListener('focus',refreshHome);
     document.addEventListener('visibilitychange',refreshHome);
@@ -843,7 +872,7 @@ const ET = (() => {
 
   /* ======================= MENU D'UN MODULE ======================= */
   let currentModule = null;
-  let cfg = {};
+  let cfg = {}, trainingConfig = null;
 
   function optionDefaults(mod) {
     const d = { gametype: 'training', questions: 10 };
@@ -856,9 +885,19 @@ const ET = (() => {
 
   function openModule(id) {
     currentModule = modules.find(m => m.id === id);
-    cfg = optionDefaults(currentModule);
+    cfg = optionDefaults(currentModule); trainingConfig = null;
     renderMenu();
     show('menu');
+  }
+
+  function chooseGameType() {
+    if (cfg.gametype === 'test') {
+      trainingConfig = JSON.parse(JSON.stringify({ ...cfg, gametype: 'training' }));
+      cfg = window.ET3Challenge.config();
+    } else if (trainingConfig) {
+      cfg = trainingConfig; trainingConfig = null;
+    }
+    renderMenu();
   }
 
   function renderMenu() {
@@ -870,7 +909,7 @@ const ET = (() => {
     if (pr) root.append(h('p', { class: 'preset-note' }, `Réglages « ${PARCOURS[currentParcours].label} » appliqués — vous pouvez les ajuster.`));
 
     // préréglages propres au module (niveaux)
-    if (mod.presets) {
+    if (mod.presets && cfg.gametype !== 'test') {
       const row = h('div', { class: 'radio-row' });
       mod.presets.forEach(p => row.append(h('button', { class: 'tab' + (cfg._preset === p.id ? ' active' : ''), type: 'button', title: p.desc || '',
         onclick: () => { Object.assign(cfg, JSON.parse(JSON.stringify(p.values))); cfg._preset = p.id; renderMenu(); } }, p.label)));
@@ -879,10 +918,13 @@ const ET = (() => {
     }
     // type de jeu
     const gt = h('div', { class: 'card' }, h('h3', {}, 'Type de jeu'),
-      radioGroup('gametype', [{ v: 'training', label: 'Entraînement libre' }, { v: 'test', label: 'Test noté' }], () => { renderMenu(); }),
-      cfg.gametype === 'test' ? h('div', { class: 'row-inline' }, h('span', {}, 'Nombre de questions : '),
-        radioGroup('questions', [{ v: 10, label: '10' }, { v: 20, label: '20' }])) : null);
+      radioGroup('gametype', [{ v: 'training', label: 'Entraînement libre' }, { v: 'test', label: 'Test du Top · 10 questions' }], chooseGameType));
     root.append(gt);
+    if (cfg.gametype === 'test') {
+      root.append(h('div', { class: 'card challenge-rules' }, h('h3', {}, 'Mêmes règles pour tous'), h('div', { html: window.ET3Challenge.rulesHTML })));
+      root.append(h('button', { class: 'validate-btn', type: 'button', onclick: startGame }, 'Commencer le test'));
+      return;
+    }
 
     const warn = h('p', { class: 'warn', id: 'menu-warn', hidden: true });
     const cards = {};
@@ -953,6 +995,7 @@ const ET = (() => {
   let ui = {};
 
   async function startGame() {
+    if (cfg.gametype === 'test') cfg = window.ET3Challenge.config();
     const mod = currentModule;
     const err = mod.validate ? mod.validate(cfg) : null;
     if (err) { const w = $('menu-warn'); w.textContent = err; w.hidden = false; return; }
@@ -1023,7 +1066,7 @@ const ET = (() => {
     const isTest = cfg.gametype === 'test';
     const limit = currentModule.timeLimit ? currentModule.timeLimit(cfg) : 60;
     const within = !isTest || t <= limit;
-    const mult = currentModule.difficulty ? currentModule.difficulty(cfg) : 1;
+    const mult = 1; // All ranked ET3 tests use the same rules and scoring.
     let gained = 0, exam = 0, head = '';
     if (res.status === 'full' && within) {
       gained = Scoring.points(t, mult, currentModule.fastBonus); exam = 2;
@@ -1067,7 +1110,7 @@ const ET = (() => {
     const [label, icon, img] = (grade * 10 / total) >= 16 ? ['Très bien', '🏆', 'success'] : (grade * 10 / total) >= 10 ? ['Correct', '👍', 'ok'] : ['Insuffisant', '📚', 'fail'];
     const imgSrc = (window.ET_IMG && window.ET_IMG[img]) || `img/${img}.jpg`;
     ui.prompt.innerHTML = ''; ui.answer.innerHTML = ''; ui.prompt.hidden = true; ui.answer.hidden = true; ui.submit.hidden = true; ui.replays.innerHTML = ''; ui.feedback.innerHTML = ''; ui.next.disabled = true;
-    const entry = { date: new Date().toISOString(), grade, score: G.score, total, two, one, avg: time / total, summary: currentModule.summary ? currentModule.summary(cfg) : '', name: '' };
+    const entry = { ruleset: window.ET3Challenge.id, date: new Date().toISOString(), grade, score: G.score, total, two, one, avg: time / total, summary: currentModule.summary ? currentModule.summary(cfg) : '', name: '' };
     const key = 'scores.' + currentModule.id;
     const byScore = (x, y) => (y.score - x.score) || (y.grade - x.grade) || ((x.avg || 0) - (y.avg || 0));
     const all = Store.get(key, []); all.push(entry); all.sort(byScore); Store.set(key, all);
@@ -1139,6 +1182,10 @@ const ET = (() => {
     screens.home = $('screen-home'); screens.menu = $('screen-menu'); screens.game = $('screen-game');
     Settings.render($('audio-settings'));
     window.ET3Top.mountHome($('home-top'));
+    window.addEventListener('et3-open-test', () => {
+      if (cfg.gametype !== 'test') { cfg.gametype = 'test'; chooseGameType(); }
+      show('menu');
+    });
     renderHome(); show('home');
     if (modules.length === 1 && CFG.autoOpen !== false) openModule(modules[0].id);
     document.addEventListener('keydown', e => {
@@ -1338,7 +1385,7 @@ const Common = (() => {
     ],
     validate: cfg => selected(cfg).length ? null : 'Sélectionnez au moins un accord.',
     timeLimit: () => 60,
-    difficulty: cfg => Math.min(2.4, Number(((1 + 0.05 * Math.max(0, selected(cfg).length - 3)) * (cfg.mode === 'sim' ? 1.2 : 1) * (cfg.inversions === 'all' ? 1.1 : 1) * (cfg.refNote === 'none' ? 1.1 : 1)).toFixed(2))),
+    difficulty: () => 1, // Fixed scoring for the common ET3 test.
     summary: cfg => `${cfg._preset ? (LEVELS.find(l => l.id === cfg._preset) || {}).label + ' · ' : ''}${selected(cfg).length} accords · ${cfg.mode === 'sim' ? 'plaqué' : 'arpégé'} · ${cfg.inversions === 'all' ? 'renv.' : 'fond.'}`,
 
     newQuestion(cfg) {
