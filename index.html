@@ -146,6 +146,10 @@ details.fold[open] summary{margin-bottom:10px}
 .score-table.arcade td.name{font-weight:800;text-transform:uppercase;letter-spacing:.05em}
 .score-table.arcade tr.me td{background:#fff7d6}
 .score-table.arcade tr.first td{font-weight:800}
+
+.sub-opt{margin-top:12px;padding-top:10px;border-top:1px dashed #e3e3e3}
+.sub-label{font-weight:700;font-size:.95rem;margin-bottom:6px}
+.sub-opt p{margin:0 0 6px}
 </style></head><body>
   <header class="menu-hdr">
     <div>
@@ -689,8 +693,15 @@ const ET = (() => {
     root.append(gt);
 
     const warn = h('p', { class: 'warn', id: 'menu-warn', hidden: true });
+    const cards = {};
     mod.options.forEach(o => {
       if (o.showIf && !o.showIf(cfg)) return;
+      // sous-option affichée à l'intérieur de la carte d'une autre option
+      if (o.inside && cards[o.inside]) {
+        const sub = h('div', { class: 'sub-opt' }, h('div', { class: 'sub-label' }, o.label), o.help ? h('p', { class: 'dim small' }, o.help) : null);
+        if (o.type === 'radio') sub.append(radioGroup(o.key, o.choices, () => renderMenu()));
+        cards[o.inside].append(sub); return;
+      }
       let card;
       if (o.collapsed) {
         const n = Array.isArray(cfg[o.key]) ? cfg[o.key].length : null;
@@ -700,6 +711,7 @@ const ET = (() => {
       else if (o.type === 'checks') card.append(checkGroup(o));
       else if (o.type === 'range') card.append(rangeInput(o));
       else if (o.type === 'select') card.append(selectInput(o));
+      cards[o.key] = card;
       root.append(card);
     });
     root.append(warn);
@@ -835,7 +847,9 @@ const ET = (() => {
     ui.feedback.innerHTML = `<div class="fb-head">${head}</div><div class="fb-body">${res.html || ''}</div>`;
     if (isTest) {
       recordAnswer(exam, gained);
-      if (res.status === 'full') { ui.next.disabled = true; setTimeout(() => { ui.next.disabled = false; nextQuestion(); }, G.q.advanceDelay || 1400); }
+      // avance automatique : plus de temps pour lire la correction quand la réponse est fausse
+      ui.next.disabled = true; const qid = G.index;
+      setTimeout(() => { if (G.index !== qid) return; ui.next.disabled = false; nextQuestion(); }, res.status === 'full' ? (G.q.advanceDelay || 1400) : 3000);
     }
     if (G.q.afterAnswer) { try { G.q.afterAnswer(res.status); } catch (_) {} }
     updateHud();

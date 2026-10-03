@@ -146,6 +146,10 @@ details.fold[open] summary{margin-bottom:10px}
 .score-table.arcade td.name{font-weight:800;text-transform:uppercase;letter-spacing:.05em}
 .score-table.arcade tr.me td{background:#fff7d6}
 .score-table.arcade tr.first td{font-weight:800}
+
+.sub-opt{margin-top:12px;padding-top:10px;border-top:1px dashed #e3e3e3}
+.sub-label{font-weight:700;font-size:.95rem;margin-bottom:6px}
+.sub-opt p{margin:0 0 6px}
 </style></head><body>
   <header class="menu-hdr">
     <div>
@@ -690,8 +694,15 @@ const ET = (() => {
     root.append(gt);
 
     const warn = h('p', { class: 'warn', id: 'menu-warn', hidden: true });
+    const cards = {};
     mod.options.forEach(o => {
       if (o.showIf && !o.showIf(cfg)) return;
+      // sous-option affichée à l'intérieur de la carte d'une autre option
+      if (o.inside && cards[o.inside]) {
+        const sub = h('div', { class: 'sub-opt' }, h('div', { class: 'sub-label' }, o.label), o.help ? h('p', { class: 'dim small' }, o.help) : null);
+        if (o.type === 'radio') sub.append(radioGroup(o.key, o.choices, () => renderMenu()));
+        cards[o.inside].append(sub); return;
+      }
       let card;
       if (o.collapsed) {
         const n = Array.isArray(cfg[o.key]) ? cfg[o.key].length : null;
@@ -701,6 +712,7 @@ const ET = (() => {
       else if (o.type === 'checks') card.append(checkGroup(o));
       else if (o.type === 'range') card.append(rangeInput(o));
       else if (o.type === 'select') card.append(selectInput(o));
+      cards[o.key] = card;
       root.append(card);
     });
     root.append(warn);
@@ -836,7 +848,9 @@ const ET = (() => {
     ui.feedback.innerHTML = `<div class="fb-head">${head}</div><div class="fb-body">${res.html || ''}</div>`;
     if (isTest) {
       recordAnswer(exam, gained);
-      if (res.status === 'full') { ui.next.disabled = true; setTimeout(() => { ui.next.disabled = false; nextQuestion(); }, G.q.advanceDelay || 1400); }
+      // avance automatique : plus de temps pour lire la correction quand la réponse est fausse
+      ui.next.disabled = true; const qid = G.index;
+      setTimeout(() => { if (G.index !== qid) return; ui.next.disabled = false; nextQuestion(); }, res.status === 'full' ? (G.q.advanceDelay || 1400) : 3000);
     }
     if (G.q.afterAnswer) { try { G.q.afterAnswer(res.status); } catch (_) {} }
     updateHud();
@@ -1117,18 +1131,18 @@ const Common = (() => {
 
   const ids = (g, f) => GROUPS.find(x => x.id === g).defs.filter(f || (() => true)).map(d => d.id);
   const LEVELS = [
-    { id: 'hw', label: 'Devoir de la semaine', desc: 'Maj7 et Min7, tous renversements, accord plaqué, une note de l’accord comme référence.',
-      values: { mode: 'sim', inversions: 'all', refNote: 'any', g_base: ['Maj7', 'Min7'], g_other: [], g_dom: [], g_ext: [] } },
+    { id: 'hw', label: 'Devoir de la semaine', desc: 'Maj7 et Min7, tous renversements, close ou drop 2 (à reconnaître), accord plaqué, une note de l’accord comme référence.',
+      values: { voicing: 'both', mode: 'sim', inversions: 'all', refNote: 'any', g_base: ['Maj7', 'Min7'], g_other: [], g_dom: [], g_ext: [] } },
     { id: 'n1', label: 'Niveau 1', desc: 'Les 5 formes de base, position fondamentale, arpégé.',
-      values: { mode: 'seq', inversions: 'root', refNote: 'any', g_base: ids('base'), g_other: [], g_dom: [], g_ext: [] } },
+      values: { voicing: 'close', mode: 'seq', inversions: 'root', refNote: 'any', g_base: ids('base'), g_other: [], g_dom: [], g_ext: [] } },
     { id: 'n2', label: 'Niveau 2', desc: 'Formes de base avec renversements + autres formes (Dim7, Dim(Maj7), Maj7♯5, Min(Maj7), C/D, Min6/9).',
-      values: { mode: 'seq', inversions: 'all', refNote: 'any', g_base: ids('base'), g_other: ids('other', d => !d.off), g_dom: [], g_ext: [] } },
+      values: { voicing: 'close', mode: 'seq', inversions: 'all', refNote: 'any', g_base: ids('base'), g_other: ids('other', d => !d.off), g_dom: [], g_ext: [] } },
     { id: 'n3', label: 'Niveau 3', desc: 'Renversements des formes de base + une tension (position fondamentale) + dominantes à une altération, plaqué.',
-      values: { mode: 'sim', inversions: 'all', refNote: 'any', g_base: ids('base'), g_other: ids('other', d => !d.off), g_dom: ['7b5', '7#5', '7b9', '7#11', '7#9', '7b13', '713'], g_ext: ids('ext', d => !d.off) } },
+      values: { voicing: 'both', mode: 'sim', inversions: 'all', refNote: 'any', g_base: ids('base'), g_other: ids('other', d => !d.off), g_dom: ['7b5', '7#5', '7b9', '7#11', '7#9', '7b13', '713'], g_ext: ids('ext', d => !d.off) } },
     { id: 'n4', label: 'Niveau 4', desc: 'Tout ce qui est coché par défaut : deux tensions, dominantes combinées, plaqué, basse comme référence.',
-      values: { mode: 'sim', inversions: 'all', refNote: 'bass', g_base: ids('base'), g_other: ids('other', d => !d.off), g_dom: ids('dom', d => !d.off), g_ext: ids('ext') } },
+      values: { voicing: 'both', mode: 'sim', inversions: 'all', refNote: 'bass', g_base: ids('base'), g_other: ids('other', d => !d.off), g_dom: ids('dom', d => !d.off), g_ext: ids('ext') } },
     { id: 'all', label: 'Tout sélectionner', desc: 'Toutes les formes, y compris les optionnelles (Maj6, Min6, 6/9, Maj7♯11, 7sus4(♭9), 13sus4…), accord seul sans note de référence.',
-      values: { mode: 'sim', inversions: 'all', refNote: 'none', g_base: ids('base'), g_other: ids('other'), g_dom: ids('dom'), g_ext: ids('ext') } },
+      values: { voicing: 'both', mode: 'sim', inversions: 'all', refNote: 'none', g_base: ids('base'), g_other: ids('other'), g_dom: ids('dom'), g_ext: ids('ext') } },
   ];
 
   ET.register({
@@ -1139,7 +1153,8 @@ const Common = (() => {
       C.MODE_OPTION,
       ...GROUPS.map(g => ({ key: 'g_' + g.id, type: 'checks', label: g.label, collapsed: g.id !== 'base', default: g.defs.filter(d => !d.off).map(d => d.id),
         choices: g.defs.map(d => ({ v: d.id, label: d.label + (d.note ? ` (${d.note})` : ''), extra: d.off })) })),
-      { key: 'inversions', type: 'radio', label: 'Renversements (formes de base)', default: 'all', choices: [{ v: 'root', label: 'Position fondamentale seulement' }, { v: 'all', label: 'Tous les renversements' }] },
+      { key: 'inversions', inside: 'g_base', type: 'radio', label: 'Renversements', default: 'all', choices: [{ v: 'root', label: 'Position fondamentale seulement' }, { v: 'all', label: 'Tous les renversements' }] },
+      { key: 'voicing', inside: 'g_base', type: 'radio', label: 'Voicing', default: 'close', help: 'Drop 2 : la 2e voix en partant du haut descend d’une octave — ADN 1-0-1 (ex. C G B E = CMaj7 fondamentale drop 2).', choices: [{ v: 'close', label: 'Close' }, { v: 'drop2', label: 'Drop 2' }, { v: 'both', label: 'Close + Drop 2' }] },
       { key: 'refNote', type: 'radio', label: 'Note de référence', default: 'any', choices: [{ v: 'any', label: 'Une note de l’accord, au hasard' }, { v: 'bass', label: 'La basse' }, { v: 'none', label: 'Aucune (accord seul)' }] },
     ],
     validate: cfg => selected(cfg).length ? null : 'Sélectionnez au moins un accord.',
@@ -1153,13 +1168,16 @@ const Common = (() => {
       const rootPc = T.rint(0, 11);
       const hasInv = d => d.group === 'base' && !d.symmetric && cfg.inversions === 'all'; // renversements : formes de base seulement
       const inv = hasInv(def) ? T.rint(0, 3) : 0;
-      const played = voicing(def, rootPc, inv, (def.group === 'base' || def.group === 'ext') ? C.randBass(48, 62) : T.rint(41, 52));
+      const vc = def.group === 'base' ? (cfg.voicing === 'both' ? T.rnd(['close', 'drop2']) : (cfg.voicing || 'close')) : null;
+      let played = voicing(def, rootPc, inv, (def.group === 'base' || def.group === 'ext') ? C.randBass(48, 60) : T.rint(41, 52));
+      if (vc === 'drop2') played = T.raiseSecond(played);   // basse conservée, 2e note du grave +8ve = drop 2 (ADN 1-0-1)
+      const askVoicing = d => d.group === 'base' && cfg.voicing === 'both';
       const ref = cfg.refNote === 'none' ? null : cfg.refNote === 'bass' ? played[0] : T.rnd(played);
       const correctRoot = def.symmetric && !def.slash ? T.pc(played[0]) : rootPc;
-      const correctText = `${cfg.refNote === 'none' ? '' : T.nameOf(correctRoot) + ' '}${def.label}${hasInv(def) ? ' · ' + INV4[inv] : ''}`;
+      const correctText = `${cfg.refNote === 'none' ? '' : T.nameOf(correctRoot) + ' '}${def.label}${hasInv(def) ? ' · ' + INV4[inv] : ''}${vc ? ' · ' + (vc === 'drop2' ? 'Drop 2' : 'Close') : ''}`;
       let sels = {};
       const q = {
-        solution: { type: def.id, inv, root: cfg.refNote === 'none' ? -1 : correctRoot },
+        solution: { type: def.id, inv, root: cfg.refNote === 'none' ? -1 : correctRoot, voicing: vc },
         autoSubmit: true,
         prompt: ref !== null ? `<span class="prompt-label">Note de référence :</span> <strong>${T.label(ref)}</strong>` : `<span class="prompt-label">Quel accord ?</span>`,
         replays: ref !== null ? [{ label: 'Note + accord', variant: 'full' }, { label: 'Accord seul', variant: 'chord' }] : [{ label: 'Réécouter', variant: 'full' }],
@@ -1172,7 +1190,7 @@ const Common = (() => {
           // Seules les catégories et formes cochées dans le menu sont proposées.
           const CAT_LABEL = { base: 'Formes de base', other: 'Autres formes', dom: 'Dominante altérée', ext: 'Base + tensions' };
           const avail = GROUPS.map(g => ({ id: g.id, defs: g.defs.filter(d => sel.includes(d.id)) })).filter(g => g.defs.length);
-          const state = { cat: avail.length === 1 ? avail[0].id : null, type: null, base: null, ext: null, inv: null, root: null };
+          const state = { cat: avail.length === 1 ? avail[0].id : null, type: null, base: null, ext: null, inv: null, root: null, voicing: null };
           const steps = UI.h('div', { class: 'cascade' });
           container.append(steps);
 
@@ -1198,13 +1216,15 @@ const Common = (() => {
             if (!state.type) return;
             const d = byId[state.type];
             let n = (state.cat === 'ext' ? 4 : 3) - (avail.length > 1 ? 0 : 1);
+            if (askVoicing(d)) { steps.append(chipRow(`${n++} · Voicing`, [{ v: 'close', label: 'Close' }, { v: 'drop2', label: 'Drop 2' }], state.voicing, v => { state.voicing = v; render(); }, { cols: 2 })); if (state.voicing === null) return; }
+            else state.voicing = d.group === 'base' ? (cfg.voicing || 'close') : null;
             if (hasInv(d)) { steps.append(chipRow(`${n++} · Renversement`, INV4.map((l, i) => ({ v: i, label: l })), state.inv, v => { state.inv = v; render(); })); if (state.inv === null) return; }
             else state.inv = 0;
             if (cfg.refNote === 'none') { state.root = -1; return; } // sans note de référence, on ne demande pas la fondamentale
             steps.append(chipRow(`${n} · ${d.slash ? 'Fondamentale (de la triade)' : 'Fondamentale'}`, Theory.FLAT.map((_, i) => ({ v: i, label: T.nameOf(i) })), state.root, v => { state.root = v; render(); }, { cols: 6 }));
           };
           render();
-          sels.get = () => (state.type === null || state.root === null || state.inv === null) ? null : { type: state.type, inv: state.inv, root: state.root };
+          sels.get = () => (state.type === null || state.root === null || state.inv === null) ? null : { type: state.type, inv: state.inv, root: state.root, voicing: state.voicing };
           // validation automatique dès que la cascade est complète
           const origRender = render;
           render = () => { origRender(); if (sels.get()) setTimeout(submit, 120); };
@@ -1237,6 +1257,7 @@ const Common = (() => {
             }
           } else status = C.compareChord(played, a.root, d.pcs, ansInv);
           if (status !== 'full' && d.symmetric && !d.slash && d.id === def.id && new Set(played.map(T.pc)).has(a.root)) status = 'full';
+          if (status === 'full' && vc && d.group === 'base' && a.voicing && a.voicing !== vc) status = 'half';
           return { status, html: `Réponse : <strong>${correctText}</strong><br><span class="dim">Notes jouées : ${C.notesText(played)}</span>` };
         },
       };
