@@ -428,6 +428,9 @@ const Audio = (() => {
   const SAMPLE_MIN = 36, SAMPLE_MAX = 119;  // C1..B7 (convention fichiers)
 
   function init() {
+    // Musical playback should use the media volume, not the iPhone ringer.
+    // Older browsers keep their default when Audio Session is unavailable.
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {}
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return ctx; }
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     master = ctx.createGain();
