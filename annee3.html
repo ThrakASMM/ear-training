@@ -160,6 +160,7 @@ details.fold[open] summary{margin-bottom:10px}
 .home-top[hidden]{display:none}
 .home-top-format{font-size:.8rem;font-weight:700;color:#243a61;margin:12px 0 8px}.home-top-rules{font-size:.78rem;color:#52607a;line-height:1.5;margin:0 0 14px}.home-top-rules summary{cursor:pointer;font-weight:650}.home-top-rules p{margin:8px 0}.home-top-play{width:100%;margin-top:12px}.challenge-rules{line-height:1.6}.challenge-rules details{font-size:.88rem}.challenge-rules summary{cursor:pointer;font-weight:600}
 .home-top-heading{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.home-top-rule{font-size:12px;line-height:1.5;color:#52607a;margin:0 0 10px}
 .home-top-icon{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:#fff4d6;font-size:23px;flex-shrink:0}
 .home-top-eyebrow{font-size:10px;font-weight:800;letter-spacing:.12em;color:#69758b;margin:0 0 3px}
 .home-top-heading h2{margin:0;font-size:1.05rem;line-height:1.25;color:#17223a}
@@ -629,6 +630,16 @@ window.ET3Top = (() => {
   const lastName=()=>{try{return JSON.parse(localStorage.getItem('et.lastName')) || '';}catch{return '';}};
   const write=value=>{localStorage.setItem(key,JSON.stringify(value));};
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function bestLocalScores(rows) {
+    const seen=new Set();
+    return rows.filter(s=>s.ruleset===challenge.id).slice().sort((a,b)=>
+      b.score-a.score || b.grade-a.grade || (a.avg || 0)-(b.avg || 0) || Date.parse(a.date || 0)-Date.parse(b.date || 0)
+    ).filter(s=>{
+      const name=(s.name || '').normalize('NFKC').trim().toLocaleLowerCase('fr-FR') || 'anonyme';
+      if(seen.has(name))return false;
+      seen.add(name);return true;
+    }).slice(0,10);
+  }
   async function request(path,options={}) {
     const response=await fetch(api+path,{...options,signal:AbortSignal.timeout(10000)});
     let body;try{body=await response.json();}catch{throw new Error('Le classement est temporairement indisponible.');}
@@ -646,6 +657,7 @@ window.ET3Top = (() => {
       <p id="hs-status" role="status" aria-live="polite"></p>
     </section>
     <section class="board"><h3 class="board-title">★ TOP 10 — ${esc(title)} ★</h3>
+      <p class="dim small">Une seule place par joueur : son meilleur score sur la période.</p>
       <div class="top-filters" role="group" aria-label="Période du classement">
         ${api?'<button type="button" class="tab active" data-period="week">Cette semaine</button><button type="button" class="tab" data-period="all">Tous les temps</button>':''}
         <button type="button" class="tab ${api?'':'active'}" data-period="local">Cet appareil</button>
@@ -664,7 +676,7 @@ window.ET3Top = (() => {
     async function refresh() {
       const current=++version;
       root.querySelectorAll('[data-period]').forEach(b=>{b.classList.toggle('active',b.dataset.period===period);b.setAttribute('aria-pressed',String(b.dataset.period===period));});
-      if(period==='local'){$('top-status').textContent='Tests aux règles communes enregistrés sur cet appareil';renderRows(all.filter(s=>s.ruleset===challenge.id).slice(0,10));return;}
+      if(period==='local'){$('top-status').textContent='Meilleur score par pseudo enregistré sur cet appareil';renderRows(bestLocalScores(all));return;}
       $('top-status').textContent='Chargement du classement commun…';$('top-rows').replaceChildren();
       try {
         const data=await request('/api/leaderboard?period='+period);
@@ -721,13 +733,14 @@ window.ET3Top = (() => {
         <button type="button" data-home-period="local">Cet appareil</button>
       </div>
       <p class="home-top-format">10 questions · fondamentale à reconnaître</p>
+      <p class="home-top-rule">Une place par joueur · meilleur score de la période</p>
       <details class="home-top-rules"><summary>Les règles communes</summary>${challenge.rulesHTML}</details>
       <p class="home-top-status" role="status" aria-live="polite"></p>
       <ol class="home-top-list" aria-label="Classement ET3"></ol>
       <p class="home-top-help">Comme au flipper : un pseudo si tu le souhaites, juste pour le fun.</p>
       <button type="button" class="ctrl-btn home-top-play">Lancer le défi de la semaine</button>`;
     const status=root.querySelector('.home-top-status'),list=root.querySelector('.home-top-list'),title=root.querySelector('h2');
-    const localScores=()=>{try{const rows=JSON.parse(localStorage.getItem('et.scores.chords3')) || [];return Array.isArray(rows)?rows.filter(s=>s.ruleset===challenge.id).slice(0,10):[];}catch{return [];}};
+    const localScores=()=>{try{const rows=JSON.parse(localStorage.getItem('et.scores.chords3')) || [];return Array.isArray(rows)?bestLocalScores(rows):[];}catch{return [];}};
     function renderRows(rows) {
       const me=read().playerId;
       list.innerHTML=rows.length?rows.slice(0,10).map((s,i)=>`<li class="home-top-row${me && s.playerId===me?' home-top-me':''}">
@@ -744,7 +757,7 @@ window.ET3Top = (() => {
       title.textContent=period==='week'?'Top de la semaine':period==='all'?'Top de tous les temps':'Top de cet appareil';
       root.querySelectorAll('[data-home-period]').forEach(b=>{const active=b.dataset.homePeriod===period;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});
       root.querySelector('.home-top-help').hidden=period==='local';
-      if(period==='local'){status.textContent='Tests aux règles communes conservés ici';renderRows(localScores());return;}
+      if(period==='local'){status.textContent='Meilleur score par pseudo conservé ici';renderRows(localScores());return;}
       status.textContent='Chargement du classement…';list.replaceChildren();
       try {
         const data=await request('/api/leaderboard?period='+period);
