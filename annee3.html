@@ -724,7 +724,7 @@ window.ET3Top = (() => {
       <p class="home-top-status" role="status" aria-live="polite"></p>
       <ol class="home-top-list" aria-label="Classement ET3"></ol>
       <p class="home-top-help">Comme au flipper : un pseudo si tu le souhaites, juste pour le fun.</p>
-      <button type="button" class="ctrl-btn home-top-play">Jouer le test du Top</button>`;
+      <button type="button" class="ctrl-btn home-top-play">Lancer le défi de la semaine</button>`;
     const status=root.querySelector('.home-top-status'),list=root.querySelector('.home-top-list'),title=root.querySelector('h2');
     const localScores=()=>{try{const rows=JSON.parse(localStorage.getItem('et.scores.chords3')) || [];return Array.isArray(rows)?rows.filter(s=>s.ruleset===challenge.id).slice(0,10):[];}catch{return [];}};
     function renderRows(rows) {
@@ -918,11 +918,11 @@ const ET = (() => {
     }
     // type de jeu
     const gt = h('div', { class: 'card' }, h('h3', {}, 'Type de jeu'),
-      radioGroup('gametype', [{ v: 'training', label: 'Entraînement libre' }, { v: 'test', label: 'Test du Top · 10 questions' }], chooseGameType));
+      radioGroup('gametype', [{ v: 'training', label: 'Entraînement libre' }, { v: 'test', label: 'Défi de la semaine · 10 questions' }], chooseGameType));
     root.append(gt);
     if (cfg.gametype === 'test') {
       root.append(h('div', { class: 'card challenge-rules' }, h('h3', {}, 'Mêmes règles pour tous'), h('div', { html: window.ET3Challenge.rulesHTML })));
-      root.append(h('button', { class: 'validate-btn', type: 'button', onclick: startGame }, 'Commencer le test'));
+      root.append(h('button', { class: 'validate-btn', type: 'button', onclick: startGame }, 'Lancer le défi de la semaine'));
       return;
     }
 
@@ -994,7 +994,11 @@ const ET = (() => {
   const G = { q: null, index: 0, total: 10, score: 0, examPts: [], start: 0, qStart: 0, answered: false, timer: null, history: [] };
   let ui = {};
 
+  let startingGame = false;
   async function startGame() {
+    if (startingGame) return;
+    startingGame = true;
+    try {
     if (cfg.gametype === 'test') cfg = window.ET3Challenge.config();
     const mod = currentModule;
     const err = mod.validate ? mod.validate(cfg) : null;
@@ -1011,6 +1015,7 @@ const ET = (() => {
     show('game');
     startTimer();
     nextQuestion();
+    } finally { startingGame = false; }
   }
 
   function buildGameScreen() {
@@ -1184,7 +1189,7 @@ const ET = (() => {
     window.ET3Top.mountHome($('home-top'));
     window.addEventListener('et3-open-test', () => {
       if (cfg.gametype !== 'test') { cfg.gametype = 'test'; chooseGameType(); }
-      show('menu');
+      void startGame();
     });
     renderHome(); show('home');
     if (modules.length === 1 && CFG.autoOpen !== false) openModule(modules[0].id);
