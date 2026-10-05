@@ -603,6 +603,11 @@ const Audio = (() => {
 window.ET3Challenge = (() => {
 // Shared by the app and the score service. Change the ID when the rules change.
 const CHALLENGE_ID = 'et3-maj7-min7-10-root-v1';
+// The teacher renews the challenge with the course (usually on Friday).
+// Change this edition only for a new assignment, never for a calendar week or UI fix.
+// INITIAL_EDITION stays fixed so existing scores and first-edition clients remain compatible.
+const INITIAL_EDITION = 'et3-course-001';
+const CHALLENGE_EDITION = 'et3-course-001';
 const CHALLENGE_CONFIG = Object.freeze({
   gametype: 'test', questions: 10, mode: 'sim', inversions: 'all', voicing: 'both', refNote: 'any',
   g_base: Object.freeze(['Maj7', 'Min7']), g_other: Object.freeze([]), g_dom: Object.freeze([]), g_ext: Object.freeze([])
@@ -615,10 +620,11 @@ function isChallengeConfig(config) {
       : config[key] === expected);
 }
   const rulesHTML = `<p><strong>10 questions · fondamentale à reconnaître</strong></p>
+    <p>Le Top reste ouvert jusqu’au prochain défi proposé en cours. Aucune remise à zéro automatique chaque semaine.</p>
     <p>Maj7 et Min7 · tous les renversements · close + drop 2 · accords plaqués. Une note de l’accord est donnée comme référence.</p>
     <p><strong>Une réponse entièrement juste en 45 secondes vaut 2/2.</strong> Tu disposes de 60 secondes par accord. Dix réponses justes dans ce délai donnent 20/20.</p>
     <details><summary>La note et le bonus de rapidité</summary><p><strong>Note sur 20 :</strong> 2 points par réponse entièrement juste, 1 par réponse partielle, 0 pour une erreur, une question passée ou une réponse après 60 secondes. La rapidité ne diminue pas la note tant que chaque réponse reste dans ce délai.</p><p><strong>Score du classement :</strong> 100 points par réponse juste, auxquels s’ajoutent 5 à 150 points de bonus de rapidité. Une réponse partielle rapporte la moitié. Maximum : 2 500 points. Le bonus départage les scores sans changer la note sur 20.</p></details>`;
-  return {id:CHALLENGE_ID,config:challengeConfig,accepts:isChallengeConfig,rulesHTML};
+  return {id:CHALLENGE_ID,edition:CHALLENGE_EDITION,initialEdition:INITIAL_EDITION,config:challengeConfig,accepts:isChallengeConfig,rulesHTML};
 
 })();
 /* Public leaderboard address only; no publishing credentials in the application. */
@@ -632,7 +638,7 @@ window.ET3Top = (() => {
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   function bestLocalScores(rows) {
     const seen=new Set();
-    return rows.filter(s=>s.ruleset===challenge.id).slice().sort((a,b)=>
+    return rows.filter(s=>s.ruleset===challenge.id && (s.edition ?? challenge.initialEdition)===challenge.edition).slice().sort((a,b)=>
       b.score-a.score || b.grade-a.grade || (a.avg || 0)-(b.avg || 0) || Date.parse(a.date || 0)-Date.parse(b.date || 0)
     ).filter(s=>{
       const name=(s.name || '').normalize('NFKC').trim().toLocaleLowerCase('fr-FR') || 'anonyme';
@@ -648,8 +654,8 @@ window.ET3Top = (() => {
   }
   function mount({root,entry,config,answers,runId,all,onLocalSave,title}) {
     const profile=read();
-    const eligible=entry.ruleset===challenge.id && challenge.accepts(config);
-    let period=api?'week':'local',version=0,publishing=false,published=false;
+    const eligible=entry.ruleset===challenge.id && (entry.edition ?? challenge.initialEdition)===challenge.edition && challenge.accepts(config);
+    let period=api?'current':'local',version=0,publishing=false,published=false;
     root.innerHTML=`<section class="highscore">
       <div class="hs-flash small">${api?'⭐ ENREGISTRER MON SCORE':'⭐ MON SCORE'}</div>
       <div class="hs-form"><label for="hs-name">Pseudo :</label><input id="hs-name" maxlength="16" placeholder="Pseudo" autocomplete="nickname" /><button id="hs-ok" class="ctrl-btn" type="button">Enregistrer</button></div>
@@ -659,7 +665,7 @@ window.ET3Top = (() => {
     <section class="board"><h3 class="board-title">★ TOP 10 — ${esc(title)} ★</h3>
       <p class="dim small">Une seule place par joueur : son meilleur score sur la période.</p>
       <div class="top-filters" role="group" aria-label="Période du classement">
-        ${api?'<button type="button" class="tab active" data-period="week">Cette semaine</button><button type="button" class="tab" data-period="all">Tous les temps</button>':''}
+        ${api?'<button type="button" class="tab active" data-period="current">Défi en cours</button><button type="button" class="tab" data-period="all">Tous les temps</button>':''}
         <button type="button" class="tab ${api?'':'active'}" data-period="local">Cet appareil</button>
         ${api?'<button type="button" class="ctrl-btn white" id="top-refresh">Actualiser</button>':''}
       </div>
@@ -681,9 +687,8 @@ window.ET3Top = (() => {
       try {
         const data=await request('/api/leaderboard?period='+period);
         if(current!==version || !root.isConnected)return;
-        if(!Array.isArray(data.rows) || !data.week || data.ruleset!==challenge.id)throw new Error('Réponse du classement invalide.');
-        const date=s=>s.split('-').reverse().join('/');
-        const when=period==='week'?`Du ${date(data.week.start)} au ${date(data.week.end)} · heure de Paris`:'Tous les temps';
+        if(!Array.isArray(data.rows) || data.ruleset!==challenge.id || data.edition!==challenge.edition)throw new Error('Réponse du classement invalide.');
+        const when=period==='current'?'Défi en cours · jusqu’au prochain défi':'Tous les temps';
         $('top-status').textContent=`Classement commun · ${when} · ${data.participants} participant${data.participants>1?'s':''}`;
         renderRows(data.rows);
       } catch(error) {if(current===version && root.isConnected)$('top-status').textContent='Classement commun indisponible. Tu peux consulter « Cet appareil » ou réessayer.';}
@@ -708,7 +713,7 @@ window.ET3Top = (() => {
         const state=remember();
         if(!/^[a-f0-9]{64}$/.test(state.token || ''))state.token=Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
         write(state);
-        const data=await request('/api/scores',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${state.token}`},body:JSON.stringify({id:runId,name:state.name,module:'chords3',ruleset:entry.ruleset,config,answers,duration:entry.avg*entry.total})});
+        const data=await request('/api/scores',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${state.token}`},body:JSON.stringify({id:runId,name:state.name,module:'chords3',ruleset:entry.ruleset,edition:entry.edition ?? challenge.initialEdition,config,answers,duration:entry.avg*entry.total})});
         const latest=read();latest.playerId=data.playerId;write(latest);published=true;
         feedback.textContent='Score partagé dans le Top ET3 !';save.textContent='Enregistré';
         window.dispatchEvent(new Event('et3-score-saved'));
@@ -726,10 +731,10 @@ window.ET3Top = (() => {
   }
   let refreshHome=()=>{};
   function mountHome(root) {
-    let period=api?'week':'local',version=0,lastRefresh=0;
-    root.innerHTML=`<header class="home-top-heading"><span class="home-top-icon" aria-hidden="true">🏆</span><div><p class="home-top-eyebrow">LES SCORES ET3</p><h2 id="home-top-title">Top de la semaine</h2></div><button type="button" class="home-top-refresh" aria-label="Actualiser le classement" title="Actualiser le classement">↻</button></header>
+    let period=api?'current':'local',version=0,lastRefresh=0;
+    root.innerHTML=`<header class="home-top-heading"><span class="home-top-icon" aria-hidden="true">🏆</span><div><p class="home-top-eyebrow">LES SCORES ET3</p><h2 id="home-top-title">Top du défi en cours</h2></div><button type="button" class="home-top-refresh" aria-label="Actualiser le classement" title="Actualiser le classement">↻</button></header>
       <div class="home-top-tabs" role="group" aria-label="Afficher les scores">
-        ${api?'<button type="button" data-home-period="week">Cette semaine</button><button type="button" data-home-period="all">Tous les temps</button>':''}
+        ${api?'<button type="button" data-home-period="current">Défi en cours</button><button type="button" data-home-period="all">Tous les temps</button>':''}
         <button type="button" data-home-period="local">Cet appareil</button>
       </div>
       <p class="home-top-format">10 questions · fondamentale à reconnaître</p>
@@ -738,7 +743,7 @@ window.ET3Top = (() => {
       <p class="home-top-status" role="status" aria-live="polite"></p>
       <ol class="home-top-list" aria-label="Classement ET3"></ol>
       <p class="home-top-help">Comme au flipper : un pseudo si tu le souhaites, juste pour le fun.</p>
-      <button type="button" class="ctrl-btn home-top-play">Lancer le défi de la semaine</button>`;
+      <button type="button" class="ctrl-btn home-top-play">Lancer le défi en cours</button>`;
     const status=root.querySelector('.home-top-status'),list=root.querySelector('.home-top-list'),title=root.querySelector('h2');
     const localScores=()=>{try{const rows=JSON.parse(localStorage.getItem('et.scores.chords3')) || [];return Array.isArray(rows)?bestLocalScores(rows):[];}catch{return [];}};
     function renderRows(rows) {
@@ -754,7 +759,7 @@ window.ET3Top = (() => {
       if(!root.isConnected || root.hidden || document.hidden)return;
       if(!force && Date.now()-lastRefresh<15000)return;
       lastRefresh=Date.now();const current=++version;
-      title.textContent=period==='week'?'Top de la semaine':period==='all'?'Top de tous les temps':'Top de cet appareil';
+      title.textContent=period==='current'?'Top du défi en cours':period==='all'?'Top de tous les temps':'Top de cet appareil';
       root.querySelectorAll('[data-home-period]').forEach(b=>{const active=b.dataset.homePeriod===period;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});
       root.querySelector('.home-top-help').hidden=period==='local';
       if(period==='local'){status.textContent='Meilleur score par pseudo conservé ici';renderRows(localScores());return;}
@@ -762,9 +767,8 @@ window.ET3Top = (() => {
       try {
         const data=await request('/api/leaderboard?period='+period);
         if(current!==version || !root.isConnected)return;
-        if(!Array.isArray(data.rows) || !data.week || data.ruleset!==challenge.id)throw new Error('Classement invalide.');
-        const shortDate=s=>s.slice(5).split('-').reverse().join('/');
-        status.textContent=(period==='week'?`Du ${shortDate(data.week.start)} au ${shortDate(data.week.end)} · `:'')+`${data.participants} participant${data.participants>1?'s':''}`;
+        if(!Array.isArray(data.rows) || data.ruleset!==challenge.id || data.edition!==challenge.edition)throw new Error('Classement invalide.');
+        status.textContent=(period==='current'?'Jusqu’au prochain défi · ':'')+`${data.participants} participant${data.participants>1?'s':''}`;
         renderRows(data.rows);
       } catch {
         if(current!==version || !root.isConnected)return;
@@ -932,11 +936,11 @@ const ET = (() => {
     }
     // type de jeu
     const gt = h('div', { class: 'card' }, h('h3', {}, 'Type de jeu'),
-      radioGroup('gametype', [{ v: 'training', label: 'Entraînement libre' }, { v: 'test', label: 'Défi de la semaine · 10 questions' }], chooseGameType));
+      radioGroup('gametype', [{ v: 'training', label: 'Entraînement libre' }, { v: 'test', label: 'Défi en cours · 10 questions' }], chooseGameType));
     root.append(gt);
     if (cfg.gametype === 'test') {
       root.append(h('div', { class: 'card challenge-rules' }, h('h3', {}, 'Mêmes règles pour tous'), h('div', { html: window.ET3Challenge.rulesHTML })));
-      root.append(h('button', { class: 'validate-btn', type: 'button', onclick: startGame }, 'Lancer le défi de la semaine'));
+      root.append(h('button', { class: 'validate-btn', type: 'button', onclick: startGame }, 'Lancer le défi en cours'));
       return;
     }
 
@@ -1129,7 +1133,7 @@ const ET = (() => {
     const [label, icon, img] = (grade * 10 / total) >= 16 ? ['Très bien', '🏆', 'success'] : (grade * 10 / total) >= 10 ? ['Correct', '👍', 'ok'] : ['Insuffisant', '📚', 'fail'];
     const imgSrc = (window.ET_IMG && window.ET_IMG[img]) || `img/${img}.jpg`;
     ui.prompt.innerHTML = ''; ui.answer.innerHTML = ''; ui.prompt.hidden = true; ui.answer.hidden = true; ui.submit.hidden = true; ui.replays.innerHTML = ''; ui.feedback.innerHTML = ''; ui.next.disabled = true;
-    const entry = { ruleset: window.ET3Challenge.id, date: new Date().toISOString(), grade, score: G.score, total, two, one, avg: time / total, summary: currentModule.summary ? currentModule.summary(cfg) : '', name: '' };
+    const entry = { ruleset: window.ET3Challenge.id, edition: window.ET3Challenge.edition, date: new Date().toISOString(), grade, score: G.score, total, two, one, avg: time / total, summary: currentModule.summary ? currentModule.summary(cfg) : '', name: '' };
     const key = 'scores.' + currentModule.id;
     const byScore = (x, y) => (y.score - x.score) || (y.grade - x.grade) || ((x.avg || 0) - (y.avg || 0));
     const all = Store.get(key, []); all.push(entry); all.sort(byScore); Store.set(key, all);
