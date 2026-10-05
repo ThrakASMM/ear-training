@@ -188,6 +188,21 @@ details.fold[open] summary{margin-bottom:10px}
 .home-top :focus-visible{outline:3px solid #0a66ff;outline-offset:3px}
 @media(max-width:900px){.et3-layout{grid-template-columns:minmax(0,1fr);gap:12px}.home-top{position:static;grid-row:1}.home-top-list{max-height:240px}.home-top-heading{margin-bottom:10px}.home-top-empty{padding:14px}.home-top-tabs button{font-size:12px}}
 
+.home-top-display{margin:14px 0}.top-score-details{margin-top:14px}.top-score-details>summary{cursor:pointer;text-align:center}
+
+.pinball-top{margin:14px 0;min-width:0;color:#ffd086;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.pb-cabinet{padding:14px 13px 10px;border:4px solid #47362a;border-radius:13px;background:linear-gradient(135deg,#241e18,#121110);box-shadow:inset 0 0 0 1px #98725055,0 5px 12px #0002}
+.pb-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 2px 12px;font-size:.65rem;font-weight:800;letter-spacing:.16em;color:#e4ae68}.pb-position{white-space:nowrap;letter-spacing:.08em}
+.pb-screen{padding:10px 7px 7px;border:1px solid #442714;border-radius:6px;background:#100905;box-shadow:inset 0 0 18px #000;overflow:hidden;color:#ffad3d}
+.pb-screen svg{display:block;width:100%;height:auto;max-height:62px;filter:drop-shadow(0 0 2px #ff871d70)}.pb-name svg{margin:0 0 12px;min-height:21px}.pb-score svg{width:88%;margin:auto}
+.pb-detail{color:#c7a881!important;text-align:center;font:500 .7rem/1.55 system-ui,sans-serif;min-height:2.9em;margin:10px 0 0!important}
+.pb-controls{display:flex;gap:9px;justify-content:center;margin-top:10px}.pb-controls button{appearance:none;border:1px solid #b9a07d;background:#f8f1e8;color:#624622;border-radius:7px;padding:6px 14px;min-width:42px;min-height:36px;font:650 .78rem system-ui;cursor:pointer}.pb-controls button:hover{background:#f1dfc7}.pb-controls button:focus-visible{outline:3px solid #0a66ff;outline-offset:2px}.pb-controls button:disabled{opacity:.45;cursor:default}.pb-pause{min-width:88px!important}
+.pb-all{font:400 .75rem/1.6 system-ui,sans-serif;color:#5e6676;margin-top:10px}.pb-all summary{cursor:pointer}.pb-all ol{padding-left:23px;margin:9px 0}.pb-all li{padding:5px 0;border-bottom:1px solid #e8e5e0;overflow-wrap:anywhere}
+.pb-sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+.pb-enter{animation:pb-arrive .4s ease-out}@keyframes pb-arrive{from{transform:translateY(7px);opacity:.45}to{transform:translateY(0);opacity:1}}
+@media(prefers-reduced-motion:reduce){.pb-enter{animation:none}}
+@media(max-width:420px){.pb-cabinet{padding:12px 8px 8px}.pb-screen{padding:9px 4px}.pb-heading{font-size:.6rem}.pb-controls button{padding:6px 11px}}
+
 </style><meta name="et3-leaderboard-api" content="https://et3-scores-classe.asmm-1896.chatgpt.site">
 </head><body>
   <header class="menu-hdr">
@@ -600,6 +615,66 @@ const Audio = (() => {
    Core — registre des modules, parcours, écran de menu, moteur de jeu
    (entraînement / test), barème, HUD, scores.
    ===================================================================== */
+/* Shared, self-contained dot-matrix Top 10. Names are drawn as pixels, never HTML. */
+window.PinballTop = (() => {
+  const patterns={
+    A:['01110','10001','10001','11111','10001','10001','10001'],B:['11110','10001','10001','11110','10001','10001','11110'],C:['01111','10000','10000','10000','10000','10000','01111'],D:['11110','10001','10001','10001','10001','10001','11110'],E:['11111','10000','10000','11110','10000','10000','11111'],F:['11111','10000','10000','11110','10000','10000','10000'],G:['01111','10000','10000','10111','10001','10001','01111'],H:['10001','10001','10001','11111','10001','10001','10001'],I:['11111','00100','00100','00100','00100','00100','11111'],J:['00111','00010','00010','00010','10010','10010','01100'],K:['10001','10010','10100','11000','10100','10010','10001'],L:['10000','10000','10000','10000','10000','10000','11111'],M:['10001','11011','10101','10101','10001','10001','10001'],N:['10001','11001','10101','10011','10001','10001','10001'],O:['01110','10001','10001','10001','10001','10001','01110'],P:['11110','10001','10001','11110','10000','10000','10000'],Q:['01110','10001','10001','10001','10101','10010','01101'],R:['11110','10001','10001','11110','10100','10010','10001'],S:['01111','10000','10000','01110','00001','00001','11110'],T:['11111','00100','00100','00100','00100','00100','00100'],U:['10001','10001','10001','10001','10001','10001','01110'],V:['10001','10001','10001','10001','10001','01010','00100'],W:['10001','10001','10001','10101','10101','10101','01010'],X:['10001','10001','01010','00100','01010','10001','10001'],Y:['10001','10001','01010','00100','00100','00100','00100'],Z:['11111','00001','00010','00100','01000','10000','11111'],
+    '0':['01110','10001','10011','10101','11001','10001','01110'],'1':['00100','01100','00100','00100','00100','00100','01110'],'2':['01110','10001','00001','00010','00100','01000','11111'],'3':['11110','00001','00001','01110','00001','00001','11110'],'4':['00010','00110','01010','10010','11111','00010','00010'],'5':['11111','10000','10000','11110','00001','00001','11110'],'6':['01110','10000','10000','11110','10001','10001','01110'],'7':['11111','00001','00010','00100','01000','01000','01000'],'8':['01110','10001','10001','01110','10001','10001','01110'],'9':['01110','10001','10001','01111','00001','00001','01110'],
+    '!':['00100','00100','00100','00100','00100','00000','00100'],'-':['00000','00000','00000','11111','00000','00000','00000'],'.':['00000','00000','00000','00000','00000','00110','00110'],"'":['00100','00100','00000','00000','00000','00000','00000'],'?':['01110','10001','00001','00010','00100','00000','00100'],' ':Array(7).fill('00000')
+  };
+  let counter=0;
+  const ns='http://www.w3.org/2000/svg';
+  const element=(tag,attrs={})=>{const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);return n;};
+  function matrix(text, width=120) {
+    const label=String(text).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/œ/gi,'OE').replace(/[’_]/g,"'").toUpperCase().slice(0,20);
+    const svg=element('svg',{viewBox:`0 0 ${width} 9`,'aria-hidden':'true',focusable:'false'}),id='pb-grid-'+(++counter);
+    const defs=element('defs'),pattern=element('pattern',{id,width:1,height:1,patternUnits:'userSpaceOnUse'});
+    pattern.append(element('circle',{cx:.5,cy:.5,r:.31,fill:'currentColor',opacity:.09}));defs.append(pattern);
+    svg.append(defs,element('rect',{width,height:9,fill:`url(#${id})`}));
+    let path='',left=Math.max(.5,(width-(label.length*6-1))/2);
+    [...label].forEach((letter,index)=>(patterns[letter]||patterns['?']).forEach((row,y)=>[...row].forEach((pixel,x)=>{if(pixel==='1'){const px=left+index*6+x,py=y+1;path+=`M${px-.36},${py}a.36,.36 0 1,0 .72,0a.36,.36 0 1,0 -.72,0 `;}})));
+    svg.append(element('path',{d:path,fill:'currentColor'}));return svg;
+  }
+  class Display {
+    constructor(root,{title='TOP 10'}={}) {
+      this.root=root;this.rows=[];this.index=0;this.paused=false;this.hover=false;this.focused=false;this.visible=true;this.loading=true;
+      this.motion=window.matchMedia?.('(prefers-reduced-motion: reduce)');this.paused=!!this.motion?.matches;
+      root.classList.add('pinball-top');
+      root.innerHTML='<div class="pb-cabinet"><div class="pb-heading"><span class="pb-title"></span><span class="pb-position">01 / 10</span></div><div class="pb-screen" aria-hidden="true"><div class="pb-name"></div><div class="pb-score"></div></div><p class="pb-detail"></p><p class="pb-current pb-sr-only" aria-live="off"></p></div><div class="pb-controls"><button type="button" class="pb-prev" aria-label="Score précédent">←</button><button type="button" class="pb-pause" aria-pressed="false">Pause</button><button type="button" class="pb-next" aria-label="Score suivant">→</button></div><details class="pb-all"><summary>Voir les 10 places</summary><ol></ol></details>';
+      this.$=selector=>root.querySelector(selector);this.$('.pb-title').textContent=title;
+      this.$('.pb-prev').addEventListener('click',()=>this.move(-1));this.$('.pb-next').addEventListener('click',()=>this.move(1));
+      this.$('.pb-pause').addEventListener('click',()=>{this.paused=!this.paused;this.controls();});
+      root.addEventListener('mouseenter',()=>this.hover=true);root.addEventListener('mouseleave',()=>this.hover=false);
+      root.addEventListener('focusin',()=>this.focused=true);root.addEventListener('focusout',e=>{if(!root.contains(e.relatedTarget))this.focused=false;});
+      this.motionHandler=e=>{this.paused=e.matches;this.controls();};this.motion?.addEventListener?.('change',this.motionHandler);
+      if(window.IntersectionObserver){this.observer=new IntersectionObserver(entries=>{this.visible=entries[0].isIntersecting;});this.observer.observe(root);}
+      this.timer=setInterval(()=>{if(!root.isConnected){this.destroy();return;}if(!this.loading && !this.paused && !this.hover && !this.focused && this.visible && !document.hidden && !root.closest('[hidden]') && this.rows.length)this.move(1);},4500);
+      this.setMessage('CHARGEMENT','Le classement arrive…');this.controls();
+    }
+    controls(){this.$('.pb-pause').textContent=this.paused?'Défiler':'Pause';this.$('.pb-pause').setAttribute('aria-pressed',String(this.paused));for(const sel of ['.pb-prev','.pb-next','.pb-pause'])this.$(sel).disabled=this.loading;}
+    setRows(rows) {
+      const normalized=rows.slice(0,10).map(r=>({name:String(r.name||'—'),score:Math.max(0,Math.round(Number(r.score)||0)),detail:String(r.detail||'')}));
+      const signature=JSON.stringify(normalized);if(signature!==this.signature)this.index=0;this.signature=signature;this.rows=normalized;this.loading=false;
+      const list=this.$('.pb-all ol');list.replaceChildren();
+      for(let i=0;i<10;i++){const row=this.rows[i],li=document.createElement('li');li.textContent=row?`${row.name} · ${row.score.toLocaleString('fr-FR')} points${row.detail?' · '+row.detail:''}`:'Place libre';list.append(li);}
+      this.controls();this.render(false);
+    }
+    setMessage(title,detail=''){this.loading=true;this.$('.pb-name').replaceChildren(matrix(title));this.$('.pb-score').replaceChildren(matrix('---',72));this.$('.pb-detail').textContent=detail;this.$('.pb-current').textContent=title+' · '+detail;this.$('.pb-all ol').replaceChildren();this.controls();}
+    move(delta){if(this.loading)return;this.index=(this.index+delta+10)%10;this.render(true);}
+    render(animate) {
+      const row=this.rows[this.index],rank=String(this.index+1).padStart(2,'0');
+      this.root.dataset.position=String(this.index+1);this.$('.pb-position').textContent=rank+' / 10';
+      this.$('.pb-name').replaceChildren(matrix(rank+' '+(row?row.name:'PLACE LIBRE')));
+      this.$('.pb-score').replaceChildren(matrix(row?String(row.score).padStart(5,'0')+' PTS':'A VOUS !',72));
+      this.$('.pb-detail').textContent=row?row.detail:'Enregistre un score pour prendre ta place.';
+      this.$('.pb-current').textContent=row?`Rang ${this.index+1} : ${row.name}, ${row.score} points. ${row.detail}`:`Rang ${this.index+1} : place libre.`;
+      const screen=this.$('.pb-screen');screen.classList.remove('pb-enter');if(animate && !this.motion?.matches){void screen.offsetWidth;screen.classList.add('pb-enter');}
+    }
+    destroy(){clearInterval(this.timer);this.observer?.disconnect();this.motion?.removeEventListener?.('change',this.motionHandler);}
+  }
+  return {mount:(root,options)=>new Display(root,options)};
+})();
+
 window.ET3Challenge = (() => {
 // Shared by the app and the score service. Change the ID when the rules change.
 const CHALLENGE_ID = 'et3-maj7-min7-10-root-v1';
@@ -670,20 +745,22 @@ window.ET3Top = (() => {
         ${api?'<button type="button" class="ctrl-btn white" id="top-refresh">Actualiser</button>':''}
       </div>
       <p id="top-status" class="dim small" role="status" aria-live="polite"></p>
-      <div class="table-wrap"><table class="score-table arcade"><thead><tr><th>Rang</th><th>Nom</th><th>Score</th><th>Note</th><th>Réglages</th><th>Temps</th><th>Date</th></tr></thead><tbody id="top-rows"></tbody></table></div>
+      <div id="top-led"></div><details class="top-score-details"><summary>Détail des résultats</summary><div class="table-wrap"><table class="score-table arcade"><thead><tr><th>Rang</th><th>Nom</th><th>Score</th><th>Note</th><th>Réglages</th><th>Temps</th><th>Date</th></tr></thead><tbody id="top-rows"></tbody></table></div></details>
     </section>`;
     const $=id=>root.querySelector('#'+id),input=$('hs-name'),save=$('hs-ok'),share=$('hs-share'),feedback=$('hs-status');
+    const pinball=window.PinballTop.mount($('top-led'),{title:'TOP 10 · ACCORDS'});
     input.value=profile.name || lastName();
     if(share)share.checked=!!profile.automatic;
     function renderRows(rows) {
       const me=read().playerId;
+      pinball.setRows(rows.map(s=>({name:s.name,score:s.score,detail:`${s.grade}/${2*(s.total || 10)} · ${Number(s.avg || 0).toFixed(1)} s par accord`})));
       $('top-rows').innerHTML=rows.map((s,i)=>`<tr class="${s===entry || (me && s.playerId===me)?'me':''}${i===0?' first':''}"><td data-label="Rang">${['🥇','🥈','🥉'][i] || '#'+(i+1)}</td><td data-label="Nom" class="name">${esc(s.name || '—')}</td><td data-label="Score" class="score">${esc(s.score)}</td><td data-label="Note">${esc(s.grade)}/${2*(s.total || 10)}</td><td data-label="Réglages">${esc(s.summary || '—')}</td><td data-label="Temps">${Number(s.avg || 0).toFixed(1)} s</td><td data-label="Date">${new Date(s.date || s.recordedAt).toLocaleDateString('fr-FR',{timeZone:'Europe/Paris'})}</td></tr>`).join('') || '<tr><td colspan="7">Aucun score pour cette période. À toi de jouer !</td></tr>';
     }
     async function refresh() {
       const current=++version;
       root.querySelectorAll('[data-period]').forEach(b=>{b.classList.toggle('active',b.dataset.period===period);b.setAttribute('aria-pressed',String(b.dataset.period===period));});
       if(period==='local'){$('top-status').textContent='Meilleur score par pseudo enregistré sur cet appareil';renderRows(bestLocalScores(all));return;}
-      $('top-status').textContent='Chargement du classement commun…';$('top-rows').replaceChildren();
+      $('top-status').textContent='Chargement du classement commun…';$('top-rows').replaceChildren();pinball.setMessage('CHARGEMENT','Le classement arrive…');
       try {
         const data=await request('/api/leaderboard?period='+period);
         if(current!==version || !root.isConnected)return;
@@ -691,7 +768,7 @@ window.ET3Top = (() => {
         const when=period==='current'?'Défi en cours · jusqu’au prochain défi':'Tous les temps';
         $('top-status').textContent=`Classement commun · ${when} · ${data.participants} participant${data.participants>1?'s':''}`;
         renderRows(data.rows);
-      } catch(error) {if(current===version && root.isConnected)$('top-status').textContent='Classement commun indisponible. Tu peux consulter « Cet appareil » ou réessayer.';}
+      } catch(error) {if(current===version && root.isConnected){$('top-status').textContent='Classement commun indisponible. Tu peux consulter « Cet appareil » ou réessayer.';pinball.setMessage('INDISPONIBLE','Consulte « Cet appareil » ou réessaie.');}}
     }
     function remember() {
       const state=read();state.name=input.value.trim();state.automatic=!!share?.checked;write(state);return state;
@@ -741,29 +818,24 @@ window.ET3Top = (() => {
       <p class="home-top-rule">Une place par joueur · meilleur score de la période</p>
       <details class="home-top-rules"><summary>Les règles communes</summary>${challenge.rulesHTML}</details>
       <p class="home-top-status" role="status" aria-live="polite"></p>
-      <ol class="home-top-list" aria-label="Classement ET3"></ol>
+      <div class="home-top-display" aria-label="Top 10 ET3"></div>
       <p class="home-top-help">Comme au flipper : un pseudo si tu le souhaites, juste pour le fun.</p>
       <button type="button" class="ctrl-btn home-top-play">Lancer le défi en cours</button>`;
-    const status=root.querySelector('.home-top-status'),list=root.querySelector('.home-top-list'),title=root.querySelector('h2');
+    const status=root.querySelector('.home-top-status'),list=root.querySelector('.home-top-display'),title=root.querySelector('h2');
+    const pinball=window.PinballTop.mount(list,{title:'TOP 10 · ACCORDS'});
     const localScores=()=>{try{const rows=JSON.parse(localStorage.getItem('et.scores.chords3')) || [];return Array.isArray(rows)?bestLocalScores(rows):[];}catch{return [];}};
     function renderRows(rows) {
-      const me=read().playerId;
-      list.innerHTML=rows.length?rows.slice(0,10).map((s,i)=>`<li class="home-top-row${me && s.playerId===me?' home-top-me':''}">
-        <span class="home-top-rank" aria-label="Rang ${i+1}">${['🥇','🥈','🥉'][i] || i+1}</span>
-        <div class="home-top-player"><span class="home-top-name" title="${esc(s.name || '—')}">${esc(s.name || '—')}</span><span class="home-top-detail">${esc(s.grade)}/${2*(s.total || 10)} · ${Number(s.avg || 0).toLocaleString('fr-FR',{maximumFractionDigits:1})} s/question</span></div>
-        <span class="home-top-points">${Number(s.score || 0).toLocaleString('fr-FR')}<small>points</small></span>
-        <details class="home-top-settings"><summary>Réglages du test</summary><p>${esc(s.summary || 'Réglages non enregistrés')}</p></details>
-      </li>`).join(''):'<li class="home-top-empty"><span aria-hidden="true">✦</span><strong>La première place est libre !</strong><span>Enregistre un test pour lancer le classement.</span></li>';
+      pinball.setRows(rows.map(s=>({name:s.name,score:s.score,detail:`${s.grade}/${2*(s.total || 10)} · ${Number(s.avg || 0).toFixed(1)} s par accord · ${s.summary || 'Défi en cours'}`})));
     }
     async function refresh(force=false) {
       if(!root.isConnected || root.hidden || document.hidden)return;
       if(!force && Date.now()-lastRefresh<15000)return;
       lastRefresh=Date.now();const current=++version;
-      title.textContent=period==='current'?'Top du défi en cours':period==='all'?'Top de tous les temps':'Top de cet appareil';
+      title.textContent=period==='current'?'Top 10 du défi en cours':period==='all'?'Top 10 de tous les temps':'Top 10 de cet appareil';
       root.querySelectorAll('[data-home-period]').forEach(b=>{const active=b.dataset.homePeriod===period;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});
       root.querySelector('.home-top-help').hidden=period==='local';
       if(period==='local'){status.textContent='Meilleur score par pseudo conservé ici';renderRows(localScores());return;}
-      status.textContent='Chargement du classement…';list.replaceChildren();
+      status.textContent='Chargement du classement…';pinball.setMessage('CHARGEMENT','Le classement arrive…');
       try {
         const data=await request('/api/leaderboard?period='+period);
         if(current!==version || !root.isConnected)return;
@@ -773,7 +845,7 @@ window.ET3Top = (() => {
       } catch {
         if(current!==version || !root.isConnected)return;
         status.textContent='Classement commun indisponible pour le moment.';
-        list.innerHTML='<li class="home-top-empty"><strong>Les scores restent sur ton appareil.</strong><span>Tu peux les consulter avec « Cet appareil », ou réessayer dans un instant.</span></li>';
+        pinball.setMessage('INDISPONIBLE','Les scores restent consultables dans « Cet appareil ».');
       }
     }
     root.querySelectorAll('[data-home-period]').forEach(b=>b.addEventListener('click',()=>{period=b.dataset.homePeriod;void refresh(true);}));
