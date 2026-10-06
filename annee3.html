@@ -720,6 +720,21 @@ window.PinballTop = (() => {
   return {mount:(root,options)=>new Display(root,options)};
 })();
 
+window.ET3Scoring = (() => {
+// One continuous scale for the client, API and historical results.
+// grade keeps the exam mark; averageSeconds uses the test's recorded duration.
+const CHORD_SCORING_VERSION = 'et3-speed-curve-v2';
+function chordScore(grade, averageSeconds) {
+  if (!Number.isFinite(grade) || grade < 0 || !Number.isFinite(averageSeconds) || averageSeconds < 0) {
+    throw new Error('Note ou temps moyen invalide.');
+  }
+  const ahead = Math.max(0, 45 - averageSeconds) / 30;
+  // Round only the final result: even tenths of a second affect the bonus.
+  return Math.round(grade * 50 * (1 + 2 * ahead * ahead));
+}
+
+return {version:CHORD_SCORING_VERSION,score:chordScore};
+})();
 window.ET3Challenge = (() => {
 // Shared by the app and the score service. Change the ID when the rules change.
 const CHALLENGE_ID = 'et3-maj7-min7-10-root-v1';
@@ -743,7 +758,7 @@ function isChallengeConfig(config) {
     <p>Le Top reste ouvert jusqu’au prochain défi proposé en cours. Aucune remise à zéro automatique chaque semaine.</p>
     <p>Maj7 et Min7 · tous les renversements · close + drop 2 · accords plaqués. Une note de l’accord est donnée comme référence.</p>
     <p><strong>Une réponse entièrement juste en 45 secondes vaut 2/2.</strong> Tu disposes de 60 secondes par accord. Dix réponses justes dans ce délai donnent 20/20.</p>
-    <details><summary>La note et le bonus de rapidité</summary><p><strong>Note sur 20 :</strong> 2 points par réponse entièrement juste, 1 par réponse partielle, 0 pour une erreur, une question passée ou une réponse après 60 secondes. La rapidité ne diminue pas la note tant que chaque réponse reste dans ce délai.</p><p><strong>Score du classement :</strong> 100 points par réponse juste, auxquels s’ajoutent 5 à 150 points de bonus de rapidité. Une réponse partielle rapporte la moitié. Maximum : 2 500 points. Le bonus départage les scores sans changer la note sur 20.</p></details>`;
+    <details><summary>La note et le bonus de rapidité</summary><p><strong>Note sur 20 :</strong> 2 points par réponse entièrement juste, 1 par réponse partielle, 0 pour une erreur, une question passée ou une réponse après 60 secondes. La rapidité ne diminue pas la note tant que chaque réponse reste dans ce délai.</p><p><strong>Score du classement :</strong> 100 points de base par réponse juste, 50 par réponse partielle. Un bonus calculé sur le temps moyen du test augmente de plus en plus vite à mesure que tu gagnes des secondes. Le calcul est continu, y compris entre deux secondes ; seul le total final est arrondi.</p><p><strong>Avec 20/20 :</strong> 45 s de moyenne → 1 000 points · 25 s → 1 889 · 15 s → 3 000 · 14 s → 3 136. À partir de 45 s de moyenne, les points de base restent acquis, sans bonus de rapidité. Le temps moyen correspond à la durée totale du test divisée par 10.</p><p>Les résultats précédents du défi sont recalculés avec ce même barème. La note sur 20 reste inchangée.</p></details>`;
   return {id:CHALLENGE_ID,edition:CHALLENGE_EDITION,initialEdition:INITIAL_EDITION,config:challengeConfig,accepts:isChallengeConfig,rulesHTML};
 
 })();
@@ -756,9 +771,14 @@ window.ET3Top = (() => {
   const lastName=()=>{try{return JSON.parse(localStorage.getItem('et.lastName')) || '';}catch{return '';}};
   const write=value=>{localStorage.setItem(key,JSON.stringify(value));};
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function regradeLocal(rows) {
+    return rows.map(s=>s.ruleset===challenge.id && Number.isFinite(s.grade) && s.grade>=0 &&
+      Number.isFinite(s.avg) && s.avg>=0
+      ? {...s,score:window.ET3Scoring.score(s.grade,s.avg),scoringVersion:window.ET3Scoring.version} : s);
+  }
   function bestLocalScores(rows) {
     const seen=new Set();
-    return rows.filter(s=>s.ruleset===challenge.id && (s.edition ?? challenge.initialEdition)===challenge.edition).slice().sort((a,b)=>
+    return regradeLocal(rows).filter(s=>s.ruleset===challenge.id && (s.edition ?? challenge.initialEdition)===challenge.edition).sort((a,b)=>
       b.score-a.score || b.grade-a.grade || (a.avg || 0)-(b.avg || 0) || Date.parse(a.date || 0)-Date.parse(b.date || 0)
     ).filter(s=>{
       const name=(s.name || '').normalize('NFKC').trim().toLocaleLowerCase('fr-FR') || 'anonyme';
@@ -904,7 +924,7 @@ window.ET3Top = (() => {
     window.setInterval(refreshHome,60000);
     void refresh(true);
   }
-  return {mount,mountHome,refreshHome:()=>refreshHome()};
+  return {mount,mountHome,regradeLocal,refreshHome:()=>refreshHome()};
 })();
 
 const ET = (() => {
@@ -948,18 +968,8 @@ const ET = (() => {
 
   /* ---------- barème commun ---------- */
   const Scoring = {
-    timeBonus(t, fast) {
-      const s = Math.max(0, t);
-      if (fast) {
-        if (s <= 0.8) return 150; if (s <= 1.5) return 120; if (s <= 2.5) return 100;
-        if (s <= 3.5) return 70; if (s <= 5) return 40; return 5;
-      }
-      if (s <= 1.5) return 150; if (s <= 3) return 120; if (s <= 5) return 100; if (s <= 8) return 80;
-      if (s <= 12) return 60; if (s <= 18) return 45; if (s <= 25) return 35; if (s <= 35) return 25;
-      if (s <= 45) return 15; return 5;
-    },
-    points(t, mult, fast) { return Math.round((100 + Scoring.timeBonus(t, fast)) * mult); },
     grade(examPts) { return examPts.reduce((a, b) => a + (b || 0), 0); },
+    score: window.ET3Scoring.score,
   };
 
   /* ---------- écrans ---------- */
@@ -1209,11 +1219,11 @@ const ET = (() => {
     const mult = 1; // All ranked ET3 tests use the same rules and scoring.
     let gained = 0, exam = 0, head = '';
     if (res.status === 'full' && within) {
-      gained = Scoring.points(t, mult, currentModule.fastBonus); exam = 2;
-      head = `<span class="ok">Correct ✅</span>` + (isTest ? ` <span class="pts"><strong>2/2</strong> · ${t.toFixed(1)} s<br>Score du classement : 100 + ${Scoring.timeBonus(t, currentModule.fastBonus)} de bonus = <strong>${gained} points</strong></span>` : '');
+      gained = 100; exam = 2;
+      head = `<span class="ok">Correct ✅</span>` + (isTest ? ` <span class="pts"><strong>2/2</strong> · ${t.toFixed(1)} s<br>Bonus de rapidité calculé sur la moyenne du test.</span>` : '');
     } else if (res.status === 'half' && within) {
-      gained = Math.round(Scoring.points(t, mult, currentModule.fastBonus) / 2); exam = 1;
-      head = `<span class="half">Presque ✳️</span>` + (isTest ? ` <span class="pts"><strong>1/2</strong> · réponse partielle<br>Score du classement : <strong>${gained} points</strong></span>` : '');
+      gained = 50; exam = 1;
+      head = `<span class="half">Presque ✳️</span>` + (isTest ? ` <span class="pts"><strong>1/2</strong> · réponse partielle<br>Bonus de rapidité calculé sur la moyenne du test.</span>` : '');
     } else if (!within) {
       head = `<span class="err">⏱️ Temps dépassé (> ${limit} s) — 0 pt</span>`;
     } else {
@@ -1247,13 +1257,14 @@ const ET = (() => {
     const grade = Scoring.grade(pts);
     const two = pts.filter(v => v === 2).length, one = pts.filter(v => v === 1).length;
     const time = (Date.now() - G.start) / 1000;
+    G.score = Scoring.score(grade, time / total);
     const [label, icon, img] = (grade * 10 / total) >= 16 ? ['Très bien', '🏆', 'success'] : (grade * 10 / total) >= 10 ? ['Correct', '👍', 'ok'] : ['Insuffisant', '📚', 'fail'];
     const imgSrc = (window.ET_IMG && window.ET_IMG[img]) || `img/${img}.jpg`;
     ui.prompt.innerHTML = ''; ui.answer.innerHTML = ''; ui.prompt.hidden = true; ui.answer.hidden = true; ui.submit.hidden = true; ui.replays.innerHTML = ''; ui.feedback.innerHTML = ''; ui.next.disabled = true;
-    const entry = { ruleset: window.ET3Challenge.id, edition: window.ET3Challenge.edition, date: new Date().toISOString(), grade, score: G.score, total, two, one, avg: time / total, summary: currentModule.summary ? currentModule.summary(cfg) : '', name: '' };
+    const entry = { scoringVersion: window.ET3Scoring.version, ruleset: window.ET3Challenge.id, edition: window.ET3Challenge.edition, date: new Date().toISOString(), grade, score: G.score, total, two, one, avg: time / total, summary: currentModule.summary ? currentModule.summary(cfg) : '', name: '' };
     const key = 'scores.' + currentModule.id;
     const byScore = (x, y) => (y.score - x.score) || (y.grade - x.grade) || ((x.avg || 0) - (y.avg || 0));
-    const all = Store.get(key, []); all.push(entry); all.sort(byScore); Store.set(key, all);
+    const all = window.ET3Top.regradeLocal(Store.get(key, [])); all.push(entry); all.sort(byScore); Store.set(key, all);
     ui.result.innerHTML = `
       <section class="result-summary">
         <img src="${imgSrc}" alt="${label}" class="score-img" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'result-icon',textContent:'${icon}'}))" />
@@ -1278,7 +1289,7 @@ const ET = (() => {
   function updateHud() {
     if (cfg.gametype === 'test') {
       ui.progress.textContent = `Question ${Math.min(G.index + 1, G.total)}/${G.total}`;
-      ui.score.textContent = `Score : ${G.score}`;
+      ui.score.textContent = `Note : ${Scoring.grade(G.examPts)}/${G.total * 2} · score à la fin`;
     } else { ui.progress.textContent = 'Entraînement libre'; ui.score.textContent = ''; }
     ui.timing.textContent = `⏱ ${((Date.now() - G.start) / 1000).toFixed(0)} s`;
   }
